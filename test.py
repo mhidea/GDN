@@ -15,12 +15,12 @@ import torch.nn.functional as F
 
 from util.data import *
 from util.preprocess import *
-
-
+from torch.utils.tensorboard.writer import SummaryWriter
 
 def test(model, dataloader):
+    global _tensorborad_path
     # test
-    loss_func = nn.MSELoss(reduction='mean')
+    loss_func = nn.MSELoss(reduction="mean")
     device = get_device()
 
     test_loss_list = []
@@ -40,15 +40,15 @@ def test(model, dataloader):
 
     i = 0
     acu_loss = 0
+    w=SummaryWriter(TensorBoardPath())
     for x, y, labels, edge_index in dataloader:
-        x, y, labels, edge_index = [item.to(device).float() for item in [x, y, labels, edge_index]]
-        
+        x, y, labels, edge_index = [
+            item.to(device).float() for item in [x, y, labels, edge_index]
+        ]
+
         with torch.no_grad():
             predicted = model(x, edge_index).float().to(device)
-            
-            
             loss = loss_func(predicted, y)
-            
 
             labels = labels.unsqueeze(1).repeat(1, predicted.shape[1])
 
@@ -57,27 +57,25 @@ def test(model, dataloader):
                 t_test_ground_list = y
                 t_test_labels_list = labels
             else:
-                t_test_predicted_list = torch.cat((t_test_predicted_list, predicted), dim=0)
+                t_test_predicted_list = torch.cat(
+                    (t_test_predicted_list, predicted), dim=0
+                )
                 t_test_ground_list = torch.cat((t_test_ground_list, y), dim=0)
                 t_test_labels_list = torch.cat((t_test_labels_list, labels), dim=0)
-        
+
         test_loss_list.append(loss.item())
         acu_loss += loss.item()
-        
+        w.add_scalar("test/acu_loss", acu_loss, i)
+
         i += 1
 
         if i % 10000 == 1 and i > 1:
             print(timeSincePlus(now, i / test_len))
 
+    test_predicted_list = t_test_predicted_list.tolist()
+    test_ground_list = t_test_ground_list.tolist()
+    test_labels_list = t_test_labels_list.tolist()
 
-    test_predicted_list = t_test_predicted_list.tolist()        
-    test_ground_list = t_test_ground_list.tolist()        
-    test_labels_list = t_test_labels_list.tolist()      
-    
-    avg_loss = sum(test_loss_list)/len(test_loss_list)
+    avg_loss = sum(test_loss_list) / len(test_loss_list)
 
     return avg_loss, [test_predicted_list, test_ground_list, test_labels_list]
-
-
-
-
