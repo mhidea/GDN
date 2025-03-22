@@ -3,6 +3,8 @@ import torch
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import time
+
+import torch.utils
 from util.time import *
 from util.env import *
 
@@ -11,13 +13,13 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
 import torch.nn.functional as F
-
+import tqdm
 
 from util.data import *
 from util.preprocess import *
-from torch.utils.tensorboard.writer import SummaryWriter
 
-def test(model, dataloader):
+
+def test(model, dataloader: DataLoader):
     global _tensorborad_path
     # test
     loss_func = nn.MSELoss(reduction="mean")
@@ -40,8 +42,8 @@ def test(model, dataloader):
 
     i = 0
     acu_loss = 0
-    w=SummaryWriter(TensorBoardPath())
-    for x, y, labels, edge_index in dataloader:
+    t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False)
+    for x, y, labels, edge_index in t:
         x, y, labels, edge_index = [
             item.to(device).float() for item in [x, y, labels, edge_index]
         ]
@@ -65,13 +67,11 @@ def test(model, dataloader):
 
         test_loss_list.append(loss.item())
         acu_loss += loss.item()
-        w.add_scalar("test/acu_loss", acu_loss, i)
 
         i += 1
-
         if i % 10000 == 1 and i > 1:
             print(timeSincePlus(now, i / test_len))
-
+    t.close()
     test_predicted_list = t_test_predicted_list.tolist()
     test_ground_list = t_test_ground_list.tolist()
     test_labels_list = t_test_labels_list.tolist()

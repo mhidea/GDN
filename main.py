@@ -7,7 +7,14 @@ from torch.utils.data import DataLoader, random_split, Subset
 
 from sklearn.preprocessing import MinMaxScaler
 
-from util.env import get_device, set_device,TensorBoardPath,createTensorBoardPath
+from util.env import (
+    get_device,
+    set_device,
+    TensorBoardPath,
+    createTensorBoardPath,
+    getSnapShotPath,
+    clearPAths,
+)
 from util.preprocess import build_loc_net, construct_data
 from util.net_struct import get_feature_map, get_fully_connected_graph_struc
 from util.iostream import printsep
@@ -16,7 +23,7 @@ from datasets.TimeDataset import TimeDataset
 from sklearn.preprocessing import MinMaxScaler
 
 from models.GDN import GDN
-
+import pickle
 from train import train
 from test import test
 from evaluate import (
@@ -40,6 +47,7 @@ from util.preprocess import findSensorActuator
 from tensorboard.summary import Writer
 from torch.utils.tensorboard.writer import SummaryWriter
 from py_markdown_table.markdown_table import markdown_table
+import itertools
 
 
 class Main:
@@ -118,7 +126,11 @@ class Main:
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
         self.test_dataloader = DataLoader(
-            test_dataset, batch_size=train_config["batch"], shuffle=False, num_workers=0
+            test_dataset,
+            batch_size=train_config["batch"],
+            shuffle=False,
+            num_workers=1,
+            pin_memory=False,
         )
 
         edge_index_sets = []
@@ -139,7 +151,7 @@ class Main:
         if len(self.env_config["load_model_path"]) > 0:
             model_save_path = self.env_config["load_model_path"]
         else:
-            model_save_path = self.get_save_path()[0]
+            model_save_path = self.env_config["save_path"] + "/best.pt"
 
             self.train_log = train(
                 self.model,
@@ -155,12 +167,19 @@ class Main:
             )
 
         # test
-        self.model.load_state_dict(torch.load(model_save_path))
+        w = SummaryWriter(TensorBoardPath())
+
         best_model = self.model.to(self.device)
         _, self.test_result = test(best_model, self.test_dataloader)
         _, self.val_result = test(best_model, self.val_dataloader)
-
-        self.get_score(self.test_result, self.val_result)
+        w.add_pr_curve(
+            tag="pr",
+            labels=np.array(self.val_result[1]),
+            predictions=np.array(self.val_result[0]),
+        )
+        scores = self.get_score(self.test_result, self.val_result)
+        w.add_hparams(hparam_dict=self.train_config, metric_dict=scores)
+        w.flush()
 
     def get_loaders(self, train_dataset, seed, batch, val_ratio=0.1):
         dataset_len = int(len(train_dataset))
@@ -177,9 +196,17 @@ class Main:
         val_sub_indices = indices[val_start_index : val_start_index + val_use_len]
         val_subset = Subset(train_dataset, val_sub_indices)
 
-        train_dataloader = DataLoader(train_subset, batch_size=batch, shuffle=True)
+        train_dataloader = DataLoader(
+            train_subset,
+            batch_size=batch,
+            shuffle=True,
+            pin_memory=False,
+            num_workers=1,
+        )
 
-        val_dataloader = DataLoader(val_subset, batch_size=batch, shuffle=False)
+        val_dataloader = DataLoader(
+            val_subset, batch_size=batch, shuffle=False, pin_memory=False, num_workers=1
+        )
 
         return train_dataloader, val_dataloader
 
@@ -205,14 +232,15 @@ class Main:
         elif self.env_config["report"] == "val":
             info = top1_val_info
 
-        print(f"F1 score: {info[0]}")
-        print(f"precision: {info[1]}")
-        print(f"recall: {info[2]}\n")
-        w=SummaryWriter(TensorBoardPath())
-        table="| F1 | precision | recall |\n|----|-----------|--------|\n|----|-----------|--------|\n"
-        table=f"{table}|  {info[0]:.2f}  |     {info[1]:.2f}      |   {info[2]:.2f}     |"
-        w.add_text("scores",table,0)
-        w.flush()
+        # print(f"F1 score: {info[0]}")
+        # print(f"precision: {info[1]}")
+        # print(f"recall: {info[2]}\n")
+        # w=SummaryWriter(TensorBoardPath())
+        # table="| F1 | precision | recall |\n|----|-----------|--------|\n"
+        # table=f"{table}|  {info[0]:.2f}  |     {info[1]:.2f}      |   {info[2]:.2f}     |"
+        # w.add_text("scores",table,0)
+        # w.flush()
+        return {"F1": info[0], "precision": info[1], "recall": info[2]}
 
     def get_save_path(self, feature_name=""):
 
@@ -236,18 +264,17 @@ class Main:
 
 
 if __name__ == "__main__":
-    global _tensorborad_path
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-batch", help="batch size", type=int, default=128)
     parser.add_argument("-epoch", help="train epoch", type=int, default=50)
-    parser.add_argument("-slide_win", help="slide_win", type=int, default=5)
+    parser.add_argument("-slide_win", help="slide_win", type=int, default=10)
     parser.add_argument("-dim", help="dimension", type=int, default=64)
     parser.add_argument("-slide_stride", help="slide_stride", type=int, default=1)
     parser.add_argument(
         "-save_path_pattern", help="save path pattern", type=str, default=""
     )
-    parser.add_argument("-dataset", help="wadi / swat", type=str, default="swat")
+    parser.add_argument("-dataset", help="wadi / swat", type=str, default="batadal")
     parser.add_argument("-device", help="cuda / cpu", type=str, default="cuda")
     parser.add_argument("-random_seed", help="random seed", type=int, default=0)
     parser.add_argument("-comment", help="experiment comment", type=str, default="")
@@ -257,47 +284,83 @@ if __name__ == "__main__":
     )
     parser.add_argument("-decay", help="decay", type=float, default=0)
     parser.add_argument("-val_ratio", help="val ratio", type=float, default=0.1)
-    parser.add_argument("-topk", help="topk num", type=int, default=15)
+    parser.add_argument("-topk", help="topk num", type=int, default=16)
     parser.add_argument("-report", help="best / val", type=str, default="best")
     parser.add_argument(
         "-load_model_path", help="trained model path", type=str, default=""
     )
-
     args = parser.parse_args()
-    args.save_path_pattern = args.dataset
-    args.comment = args.dataset
-    createTensorBoardPath(args.dataset)
-    random.seed(args.random_seed)
-    np.random.seed(args.random_seed)
-    torch.manual_seed(args.random_seed)
-    torch.cuda.manual_seed(args.random_seed)
-    torch.cuda.manual_seed_all(args.random_seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.deterministic = True
-    os.environ["PYTHONHASHSEED"] = str(args.random_seed)
+    batches = [64, 128]
+    windows = [8, 10, 12]
+    dims = [32, 64, 128]
+    topks = [12, 14, 16, 18]
+    out_layers = [128, 256]
 
-    train_config = {
-        "batch": args.batch,
-        "epoch": args.epoch,
-        "slide_win": args.slide_win,
-        "dim": args.dim,
-        "slide_stride": args.slide_stride,
-        "comment": args.comment,
-        "seed": args.random_seed,
-        "out_layer_num": args.out_layer_num,
-        "out_layer_inter_dim": args.out_layer_inter_dim,
-        "decay": args.decay,
-        "val_ratio": args.val_ratio,
-        "topk": args.topk,
-    }
+    # batches=[64]
+    # windows=[8]
+    # dims=[32]
+    # topks=[12]
+    # out_layers=[128]
 
-    env_config = {
-        "save_path": args.save_path_pattern,
-        "dataset": args.dataset,
-        "report": args.report,
-        "device": args.device,
-        "load_model_path": args.load_model_path,
-    }
+    grid = itertools.product(batches, windows, dims, topks, out_layers)
+    for i, (batch, window, dim, topk, out_layer) in enumerate(grid):
+        print(
+            i,
+            "batch",
+            batch,
+            "window",
+            window,
+            "dim",
+            dim,
+            "topk",
+            topk,
+            "out_layer",
+            out_layer,
+        )
+        args.batch = batch
+        args.slide_win = window
+        args.dim = dim
+        args.topk = topk
+        args.out_layer_inter_dim = out_layer
 
-    main = Main(train_config, env_config, debug=False)
-    main.run()
+        createTensorBoardPath(args.dataset)
+        print(TensorBoardPath())
+        args.save_path_pattern = getSnapShotPath()
+        args.comment = args.dataset
+        random.seed(args.random_seed)
+        np.random.seed(args.random_seed)
+        torch.manual_seed(args.random_seed)
+        torch.cuda.manual_seed(args.random_seed)
+        torch.cuda.manual_seed_all(args.random_seed)
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        os.environ["PYTHONHASHSEED"] = str(args.random_seed)
+
+        train_config = {
+            "batch": args.batch,
+            "epoch": args.epoch,
+            "slide_win": args.slide_win,
+            "dim": args.dim,
+            "slide_stride": args.slide_stride,
+            "comment": args.comment,
+            "seed": args.random_seed,
+            "out_layer_num": args.out_layer_num,
+            "out_layer_inter_dim": args.out_layer_inter_dim,
+            "decay": args.decay,
+            "val_ratio": args.val_ratio,
+            "topk": args.topk,
+        }
+
+        env_config = {
+            "save_path": args.save_path_pattern,
+            "dataset": args.dataset,
+            "report": args.report,
+            "device": args.device,
+            "load_model_path": "",
+        }
+        with open(f"{getSnapShotPath()}/args.pickle", "wb") as file:
+            # Serialize and save the object to the file
+            pickle.dump(args, file)
+        main = Main(train_config, env_config, debug=False)
+        main.run()
+        clearPAths()

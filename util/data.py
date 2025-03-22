@@ -4,7 +4,7 @@ from scipy.stats import rankdata, iqr, trim_mean
 from sklearn.metrics import f1_score, mean_squared_error
 import numpy as np
 from numpy import percentile
-
+import pandas as pd
 
 def get_attack_interval(attack): 
     heads = []
@@ -124,3 +124,41 @@ def get_f1_score(scores, gt, contamination):
     pred_labels = (scores > threshold).astype('int').ravel()
 
     return f1_score(gt, pred_labels)
+
+
+
+def getAttacks(df: pd.DataFrame, label)->np.ndarray:
+    # r1 = df[(df[label] == 1) & (df[label].shift() == 0)].index
+    # r2 = df[(df[label] == 1) & (df[label].shift(-1) == 0)].index
+    
+    attacks = df[df[label] == 1].copy(deep=True)
+    count = attacks.shape[0]
+    print("numebr of attacks = ", count)
+    first_attack_index = attacks.first_valid_index()
+    last_attack_index = attacks.last_valid_index()
+
+    print("First attack index is : ", first_attack_index)
+    print("Last attack index is : ", last_attack_index)
+
+    attacks["count"] = attacks.index.to_series()
+    attacks["count"] = attacks["count"] - attacks["count"].shift(
+        fill_value=first_attack_index
+    )
+    attacks_starts = attacks[attacks["count"] != 1].index
+
+    attacks["count"] = attacks.index.to_series()
+    attacks["count"] = attacks["count"] - attacks["count"].shift(
+        periods=-1, fill_value=last_attack_index
+    )
+    attacks_ends = attacks[attacks["count"] != -1].index
+    assert len(attacks_starts) == len(attacks_ends)
+    print("Number of attacks: ", len(attacks_starts))
+
+
+
+    diff:np.ndarray =np.array([(b-a) for a, b in zip(attacks_starts, attacks_ends)])
+    print("Minimum attack len: ",diff.min())
+    print("Maximum attack len: ",diff.max())
+    print("Mean attack len: ",diff.mean())
+    
+    return [[a, b] for a, b in zip(attacks_starts, attacks_ends)]
