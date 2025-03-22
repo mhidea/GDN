@@ -44,9 +44,7 @@ import matplotlib.pyplot as plt
 
 import random
 from util.preprocess import findSensorActuator
-from tensorboard.summary import Writer
 from torch.utils.tensorboard.writer import SummaryWriter
-from py_markdown_table.markdown_table import markdown_table
 import itertools
 
 
