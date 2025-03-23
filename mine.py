@@ -1,7 +1,4 @@
 import torch
-import torch_geometric
-
-
 
 
 import torch
@@ -18,9 +15,8 @@ if not gpu_ok:
         "GPU is not NVIDIA V100, A100, or H100. Speedup numbers may be lower "
         "than expected."
     )
-    
-    
-print(torch_geometric.__version__)
+
+
 print(torch.__version__)
 # torch.set_default_device("cuda")
 # torch.cuda.set_device(0)
@@ -31,4 +27,3 @@ print(device)
 
 
 print(torch.version.cuda)
-

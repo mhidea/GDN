@@ -24,7 +24,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from models.GDN import GDN
 import pickle
-from train import train
+from train import train, loss_func
 from test import test
 from evaluate import (
     get_err_scores,
@@ -46,6 +46,7 @@ import random
 from util.preprocess import findSensorActuator
 from torch.utils.tensorboard.writer import SummaryWriter
 import itertools
+from torch.profiler import profile, record_function, ProfilerActivity
 
 
 class Main:
@@ -144,6 +145,42 @@ class Main:
             topk=train_config["topk"],
         ).to(self.device)
 
+    def profile(self):
+
+        activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA, ProfilerActivity.XPU]
+        sort_by_keyword = get_device() + "_time_total"
+
+        self.model.train()
+        self.model.cuda()
+        optimizer = torch.optim.Adam(
+            self.model.parameters(),
+            lr=0.001,
+            weight_decay=self.train_config["decay"],
+        )
+        print(f"profiling with deivce: {get_device()}")
+        # profile(f"Kineto ? {torch.profiler.kineto_available()}")
+        with torch.profiler.profile(
+            # activities=activities,
+            schedule=torch.profiler.schedule(wait=1, warmup=1, active=3, repeat=4),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(TensorBoardPath()),
+            record_shapes=True,
+            profile_memory=True,
+            with_stack=True,
+        ) as prof:
+            for step, batch_data in enumerate(self.train_dataloader):
+                # if step >= 1 + 1 + 3:
+                #     break
+                x, labels, attack_labels, edge_index = batch_data
+
+                x, labels, edge_index = [
+                    item.float().to(get_device()) for item in [x, labels, edge_index]
+                ]
+                out = self.model(x, edge_index).float().to(get_device())
+                loss = loss_func(out, labels)
+                loss.backward()
+                optimizer.step()
+                prof.step()
+
     def run(self):
 
         if len(self.env_config["load_model_path"]) > 0:
@@ -176,7 +213,11 @@ class Main:
             predictions=np.array(self.val_result[0]),
         )
         scores = self.get_score(self.test_result, self.val_result)
-        w.add_hparams(hparam_dict=self.train_config, metric_dict=scores)
+        w.add_hparams(
+            run_name=self.env_config["dataset"],
+            hparam_dict=self.train_config,
+            metric_dict=scores,
+        )
         w.flush()
 
     def get_loaders(self, train_dataset, seed, batch, val_ratio=0.1):
@@ -266,33 +307,33 @@ if __name__ == "__main__":
 
     parser.add_argument("-batch", help="batch size", type=int, default=128)
     parser.add_argument("-epoch", help="train epoch", type=int, default=50)
-    parser.add_argument("-slide_win", help="slide_win", type=int, default=10)
+    parser.add_argument("-slide_win", help="slide_win", type=int, default=5)
     parser.add_argument("-dim", help="dimension", type=int, default=64)
     parser.add_argument("-slide_stride", help="slide_stride", type=int, default=1)
     parser.add_argument(
         "-save_path_pattern", help="save path pattern", type=str, default=""
     )
-    parser.add_argument("-dataset", help="wadi / swat", type=str, default="batadal")
+    parser.add_argument("-dataset", help="wadi / swat", type=str, default="swat")
     parser.add_argument("-device", help="cuda / cpu", type=str, default="cuda")
     parser.add_argument("-random_seed", help="random seed", type=int, default=0)
     parser.add_argument("-comment", help="experiment comment", type=str, default="")
     parser.add_argument("-out_layer_num", help="outlayer num", type=int, default=1)
     parser.add_argument(
-        "-out_layer_inter_dim", help="out_layer_inter_dim", type=int, default=256
+        "-out_layer_inter_dim", help="out_layer_inter_dim", type=int, default=64
     )
     parser.add_argument("-decay", help="decay", type=float, default=0)
     parser.add_argument("-val_ratio", help="val ratio", type=float, default=0.1)
-    parser.add_argument("-topk", help="topk num", type=int, default=16)
+    parser.add_argument("-topk", help="topk num", type=int, default=15)
     parser.add_argument("-report", help="best / val", type=str, default="best")
     parser.add_argument(
         "-load_model_path", help="trained model path", type=str, default=""
     )
     args = parser.parse_args()
-    batches = [64, 128]
-    windows = [8, 10, 12]
-    dims = [32, 64, 128]
-    topks = [12, 14, 16, 18]
-    out_layers = [128, 256]
+    batches = [128]
+    windows = [5]
+    dims = [64]
+    topks = [15]
+    out_layers = [64]
 
     # batches=[64]
     # windows=[8]
@@ -356,9 +397,13 @@ if __name__ == "__main__":
             "device": args.device,
             "load_model_path": "",
         }
+        main = Main(train_config, env_config, debug=False)
+
+        # main.profile()
+        # break
+
         with open(f"{getSnapShotPath()}/args.pickle", "wb") as file:
             # Serialize and save the object to the file
             pickle.dump(args, file)
-        main = Main(train_config, env_config, debug=False)
         main.run()
         clearPAths()
