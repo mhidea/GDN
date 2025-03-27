@@ -9,7 +9,7 @@ from sklearn.preprocessing import MinMaxScaler
 from util.env import *
 from util.preprocess import build_loc_net, construct_data
 from util.net_struct import get_feature_map, get_fully_connected_graph_struc
-
+from util.consts import Tasks
 from datasets.TimeDataset import TimeDataset
 from sklearn.preprocessing import MinMaxScaler
 
@@ -32,6 +32,7 @@ from util.preprocess import findSensorActuator
 
 from torch.profiler import ProfilerActivity
 from util.params import Params
+from torchmetrics.classification import BinaryStatScores
 
 _train_original = None
 _test_original = None
@@ -187,7 +188,7 @@ class Main:
         if not self.param.trained:
             wasnt_trained = True
             print("Model Not Found. Training new model.")
-            self.train_log = train(
+            train(
                 model=self.model,
                 train_dataloader=self.train_dataloader,
                 val_dataloader=self.val_dataloader,
@@ -200,9 +201,26 @@ class Main:
 
         # test
         best_model = self.model.to(self.param.device)
-        _, self.test_result = test(best_model, self.test_dataloader)
-        _, self.val_result = test(best_model, self.val_dataloader)
-        scores = self.get_score(self.test_result, self.val_result)
+        val_avg_loss, _ = test(best_model, self.val_dataloader)
+        test_avg_loss, test_result = test(
+            best_model, self.test_dataloader, threshold=val_avg_loss
+        )
+
+        bs = BinaryStatScores().to(self.param.device)
+        bs.update(
+            test_result[0].to(self.param.device),
+            test_result[2].to(self.param.device),
+        )
+        result = bs.compute()
+        scores = {
+            "loss": test_avg_loss,
+            "tp": result[0],
+            "fp": result[1],
+            "tn": result[2],
+            "fn": result[3],
+        }
+        # val_avg_loss, self.val_result = test(best_model, self.val_dataloader)
+        # scores = self.get_score(self.test_result, self.val_result)
         if wasnt_trained:
             if isinstance(scores, dict):
                 pass

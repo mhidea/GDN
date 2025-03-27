@@ -5,6 +5,7 @@ from sklearn.metrics import f1_score, mean_squared_error
 import numpy as np
 from numpy import percentile
 import pandas as pd
+import os
 
 
 def get_attack_interval(attack):
@@ -181,8 +182,8 @@ def createDummyDataset(samples: int, coulmns=3):
         "attack": np.random.randint(0, 2, samples),
     }
     for col in range(coulmns):
-        data_normal["col" + col] = np.random.random(samples)
-        data_abnormal["col" + col] = np.random.random(samples)
+        data_normal["col_" + col] = np.random.random(samples)
+        data_abnormal["col_" + col] = np.random.random(samples)
     df = pd.DataFrame(data_normal)
 
     # Save the DataFrame to a CSV file

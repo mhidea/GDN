@@ -20,10 +20,11 @@ import os
 import tqdm
 from util.time import *
 from util.env import *
+from util.consts import Tasks
 
 
 def loss_func(y_pred, y_true):
-    loss = F.mse_loss(y_pred, y_true, reduction="mean")
+    loss = F.mse_loss(y_pred, y_true, reduction="sum")
 
     return loss
 
@@ -45,23 +46,13 @@ def train(
         model.parameters(), lr=param.learning_rate, weight_decay=param.decay
     )
 
-    now = time.time()
-
-    train_loss_list = []
-    cmp_loss_list = []
-
     acu_loss = 0
     min_loss = 1e8
-    min_f1 = 0
-    min_pre = 0
-    best_prec = 0
 
-    i = 0
     epoch = param.epoch
     early_stop_win = 15
     model.to(param.device)
 
-    log_interval = 1000
     stop_improve_count = 0
 
     dataloader = train_dataloader
@@ -78,24 +69,23 @@ def train(
         acu_loss = 0
         model.train()
         for windowed_x, y, next_label, edge_index in t:
-            # _start = time.time()
 
-            # x, labels, edge_index = [
-            #     item.to(device, non_blocking=True) for item in [x, labels, edge_index]
-            # ]
+            if param.task is Tasks.next_sensors:
+                y_truth = y.to(param.device, non_blocking=True)
+            elif param.task is Tasks.next_label:
+                y_truth = next_label.unsqueeze(1).to(param.device, non_blocking=True)
 
             out = model(
                 windowed_x.to(param.device, non_blocking=True),
                 edge_index.to(param.device, non_blocking=True),
             )
-            loss = loss_func(out, y.to(param.device, non_blocking=True))
+            loss = loss_func(out, y_truth)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 
-            train_loss_list.append(loss.item())
             acu_loss += loss.item()
-            t.set_postfix({"loss": loss.item()})
+            t.set_postfix({"loss": loss.item() / windowed_x.shape[0]})
 
         t.set_postfix({"loss": (acu_loss / len(dataloader))})
         t.close()
@@ -127,5 +117,3 @@ def train(
             if acu_loss < min_loss:
                 torch.save(model.state_dict(), param.best_path)
                 min_loss = acu_loss
-
-    return train_loss_list

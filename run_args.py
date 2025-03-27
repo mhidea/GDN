@@ -30,7 +30,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("-model", help="trained model", type=Models, default=Models.gdn)
     parser.add_argument(
-        "-task", help="training task", type=Tasks, default=Tasks.next_features
+        "-task", help="training task", type=Tasks, default=Tasks.next_sensors
     )
 
     args = parser.parse_args()

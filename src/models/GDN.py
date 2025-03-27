@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.BaseMode import BaseClass
+from models.BaseMode import BaseModel
 from util.env import *
 from util.time import *
 
@@ -80,7 +80,7 @@ class GNNLayer(nn.Module):
         return self.relu(out)
 
 
-class GDN(BaseClass):
+class GDN(BaseModel):
     def __init__(
         self,
         edge_index_sets,

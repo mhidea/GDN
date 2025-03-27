@@ -12,7 +12,7 @@ class Datasets(Enum):
 
 class Tasks(Enum):
     next_label = 1
-    next_features = 2
+    next_sensors = 2
     current_labels = 3
 
 
