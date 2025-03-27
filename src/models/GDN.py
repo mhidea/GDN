@@ -1,16 +1,14 @@
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
-import torch.nn as nn
-import time
-from util.time import *
-from util.env import *
-from torch_geometric.nn import GCNConv, GATConv, EdgeConv
 import math
+
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
+from models.BaseMode import BaseClass
+from util.env import *
+from util.time import *
+
 from .graph_layer import GraphLayer
-from util.consts import Tasks
 
 
 def get_batch_edge_index(org_edge_index, batch_num, node_num):
@@ -82,26 +80,24 @@ class GNNLayer(nn.Module):
         return self.relu(out)
 
 
-class GDN(nn.Module):
+class GDN(BaseClass):
     def __init__(
         self,
         edge_index_sets,
-        node_num,
         embeding_dim=64,
         out_layer_inter_dim=256,
         window_size=10,  # silding windows size
         out_layer_num=1,
         topk=20,
-        task: Tasks = Tasks.next_features,
+        **kwargs
     ):
+        super(GDN, self).__init__(**kwargs)
 
-        super(GDN, self).__init__()
-        self.task = task
         self.edge_index_sets = edge_index_sets
 
         # edge_index = edge_index_sets[0]
 
-        self.embedding = nn.Embedding(node_num, embeding_dim)
+        self.embedding = nn.Embedding(self.node_num, embeding_dim)
         self.bn_outlayer_in = nn.BatchNorm1d(embeding_dim)
 
         edge_set_num = len(edge_index_sets)
@@ -123,7 +119,7 @@ class GDN(nn.Module):
 
         self.out_layer = OutLayer(
             embeding_dim * edge_set_num,
-            node_num,
+            self.node_num,
             out_layer_num,
             inter_num=out_layer_inter_dim,
         )
@@ -138,7 +134,7 @@ class GDN(nn.Module):
     def init_params(self):
         nn.init.kaiming_uniform_(self.embedding.weight, a=math.sqrt(5))
 
-    def forward(self, data, org_edge_index):
+    def pre_forward(self, data, org_edge_index):
         x = data.clone().detach()
         edge_index_sets = self.edge_index_sets
 
@@ -217,7 +213,4 @@ class GDN(nn.Module):
 
         out = self.dp(out)
         out = self.out_layer(out)
-        if self.task == Tasks.next_features:
-            out = out.view(-1, node_num)
-
         return out

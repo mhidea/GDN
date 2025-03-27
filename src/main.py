@@ -95,12 +95,13 @@ class Main:
 
         self.model = self.param.model.getClass()(
             edge_index_sets,
-            len(feature_map),
+            node_num=len(feature_map),
             embeding_dim=self.param.embedding_dimension,
             window_size=self.param.window_length,
             out_layer_num=self.param.out_layer_num,
             out_layer_inter_dim=self.param.out_layer_inter_dim,
             topk=self.param.topk,
+            task=param.task,
         ).to(self.param.device)
 
     def _prepareDF(self, scale, dataset):

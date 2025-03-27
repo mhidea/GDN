@@ -11,6 +11,7 @@ if __name__ == "__main__":
     # Initializing parameters
     param = Params()
     set_param(param)
+    param.task = Tasks.next_features
     param.dataset = Datasets.batadal
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     param.epoch = 40

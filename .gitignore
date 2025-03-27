@@ -5,7 +5,6 @@ runs/
 temp/
 run_copy.sh
 __pycache__
-.vscode/
 board/
 data/
 snapshot/

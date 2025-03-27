@@ -1,0 +1,24 @@
+{
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/src"
+    ],
+    "actionButtons": {
+        "defaultColor": "#4192C8", // Can also use string color names.
+        "loadNpmCommands": false, // Disables automatic generation of actions for npm commands.
+        "reloadButton": "♻️", // Custom reload button text or icon (default ↻). null value enables automatic reload on configuration change
+        "commands": [
+            {
+                "cwd": "${workspaceFolder}", // Terminal initial folder ${workspaceFolder} and os user home as defaults
+                "name": "$(triangle-right) TB",
+                "singleInstance": true,
+                "command": "tensorboard.launch", // This is executed in the terminal.
+            },
+            {
+                "cwd": "${workspaceFolder}",
+                "name": "$(globe) TB",
+                "command": "tensorboard --logdir ${fileDirname}",
+            }
+        ]
+    }
+}

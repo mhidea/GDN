@@ -3,12 +3,7 @@ import torch
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import time
-
 import torch.utils
-import torch.utils
-import torch.utils
-from util.time import *
-from util.env import *
 from sklearn.metrics import mean_squared_error
 from test_loop import *
 import torch.nn.functional as F
@@ -23,6 +18,8 @@ from torch.utils.data import DataLoader, random_split, Subset
 from scipy.stats import iqr
 import os
 import tqdm
+from util.time import *
+from util.env import *
 
 
 def loss_func(y_pred, y_true):

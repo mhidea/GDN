@@ -5,10 +5,7 @@ import torch.nn as nn
 import time
 
 import torch.utils
-from util.time import *
-from util.env import *
 
-import argparse
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
@@ -17,7 +14,8 @@ import tqdm
 
 from util.data import *
 from util.preprocess import *
-from util.env import get_param
+from util.time import *
+from util.env import *
 
 
 def test(model, dataloader: DataLoader):
