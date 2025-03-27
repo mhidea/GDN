@@ -2,7 +2,6 @@
 import pandas as pd
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, random_split, Subset
 
 from sklearn.preprocessing import MinMaxScaler
@@ -25,21 +24,17 @@ from evaluate import (
     get_full_err_scores,
 )
 
-from datetime import datetime
-
 import os
-from pathlib import Path
-
-import matplotlib.pyplot as plt
 
 import random
 from util.preprocess import findSensorActuator
 
 
-import itertools
-from torch.profiler import profile, record_function, ProfilerActivity
-from util.consts import Datasets, Models, Tasks
+from torch.profiler import ProfilerActivity
 from util.params import Params
+
+_train_original = None
+_test_original = None
 
 
 class Main:
@@ -109,28 +104,35 @@ class Main:
         ).to(self.param.device)
 
     def _prepareDF(self, scale, dataset):
-        train_orig = pd.read_csv(f"./data/{dataset}/train.csv", sep=",", index_col=0)
-        test_orig = pd.read_csv(f"./data/{dataset}/test.csv", sep=",", index_col=0)
-        col, _, _ = findSensorActuator(train_orig)
-        print(col)
-        if scale:
-            # Initialize the MinMaxScaler
-            scaler = MinMaxScaler()
-
-            # Fit the scaler on the first dataset
-            scaler.fit(train_orig)
-
-            # Transform both datasets using the same scaler
-            train_orig[train_orig.columns] = scaler.transform(
-                train_orig[train_orig.columns]
+        global _train_original
+        global _test_original
+        if _train_original is None:
+            _train_original = pd.read_csv(
+                f"./data/{dataset}/train.csv", sep=",", index_col=0
             )
-
-            test_orig[train_orig.columns] = scaler.transform(
-                test_orig[train_orig.columns]
+            _test_original = pd.read_csv(
+                f"./data/{dataset}/test.csv", sep=",", index_col=0
             )
-        if "attack" in train_orig.columns:
-            train_orig = train_orig.drop(columns=["attack"])
-        return train_orig, test_orig
+            col, _, _ = findSensorActuator(_train_original)
+            print(col)
+            if scale:
+                # Initialize the MinMaxScaler
+                scaler = MinMaxScaler()
+
+                # Fit the scaler on the first dataset
+                scaler.fit(_train_original)
+
+                # Transform both datasets using the same scaler
+                _train_original[_train_original.columns] = scaler.transform(
+                    _train_original[_train_original.columns]
+                )
+
+                _test_original[_train_original.columns] = scaler.transform(
+                    _test_original[_train_original.columns]
+                )
+            if "attack" in _train_original.columns:
+                _train_original = _train_original.drop(columns=["attack"])
+        return _train_original, _test_original
 
     def profile(self):
         print(f"Profiling the device {self.param.device}")
@@ -179,7 +181,7 @@ class Main:
     def _loadBestModel(self):
         self.model.load_state_dict(torch.load(open(self.param.best_path, "rb")))
 
-    def run(self):
+    def run(self, step: int = 0):
         wasnt_trained = False
         if not self.param.trained:
             wasnt_trained = True
@@ -199,17 +201,24 @@ class Main:
         best_model = self.model.to(self.param.device)
         _, self.test_result = test(best_model, self.test_dataloader)
         _, self.val_result = test(best_model, self.val_dataloader)
-
+        scores = self.get_score(self.test_result, self.val_result)
         if wasnt_trained:
-            # TensorBoardPath()
-            # w.add_pr_curve(
-            #     tag="pr",
-            #     labels=np.array(self.val_result[1]),
-            #     predictions=np.array(self.val_result[0]),
-            # )
-            return self.get_score(self.test_result, self.val_result)
+            if isinstance(scores, dict):
+                pass
+                getWriter().add_hparams(
+                    # run_name=f"{param.model.name}_{param.dataset.value}",
+                    hparam_dict=self.param.toDict(),
+                    metric_dict=scores,
+                    # global_step=i,
+                )
+            with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
+                # Serialize and save the object to the file
+                pickle.dump(self.param, file)
+            getWriter().add_text("summary", self.param.summary(), global_step=step)
+            # clearPAths()
+            getWriter().flush()
 
-            # w.flush()
+        return scores
 
     def get_loaders(self, train_dataset):
         dataset_len = int(len(train_dataset))
@@ -265,99 +274,7 @@ class Main:
         elif self.env_config["report"] == "val":
             info = top1_val_info
         return {
-            "F1_score": info[0],
-            "precision_score": info[1],
-            "recall_score": info[2],
+            "F1": info[0],
+            "precision": info[1],
+            "recall": info[2],
         }
-
-    def get_save_path(self, feature_name=""):
-
-        dir_path = self.env_config["save_path"]
-
-        if self.datestr is None:
-            now = datetime.now()
-            self.datestr = now.strftime("%m_%d_%H_%M_%S")
-        datestr = self.datestr
-
-        paths = [
-            f"./pretrained/{dir_path}/best_{datestr}.pt",
-            f"./results/{dir_path}/{datestr}.csv",
-        ]
-
-        for path in paths:
-            dirname = os.path.dirname(path)
-            Path(dirname).mkdir(parents=True, exist_ok=True)
-
-        return paths
-
-
-if __name__ == "__main__":
-
-    # Initializing parameters
-    param = Params()
-    set_param(param)
-    param.dataset = Datasets.dummy
-    param.device = "cuda" if torch.cuda.is_available() else "cpu"
-    param.epoch = 10
-
-    # Creating grid search
-    batches = [256]
-    windows = [5, 6]
-    dims = [64]
-    topks = [2]
-    out_layers = [64]
-
-    # batches=[64]
-    # windows=[8]
-    # dims=[32]
-    # topks=[12]
-    # out_layers=[128]
-    grid = itertools.product(batches, windows, dims, topks, out_layers)
-    createPaths(param.model, param.dataset)
-    createWriter(TensorBoardPath())
-    for i, (batch, window, dim, topk, out_layer) in enumerate(grid):
-        setTag(i)
-        print(
-            i,
-            "batch",
-            batch,
-            "window",
-            window,
-            "dim",
-            dim,
-            "topk",
-            topk,
-            "out_layer",
-            out_layer,
-        )
-        param.batch = batch
-        param.window_length = window
-        param.embedding_dimension = dim
-        param.topk = topk
-        param.out_layer_inter_dim = out_layer
-
-        # train_config = createTrainConfig(args)
-        # env_config = createEnvConfig(args)
-
-        print(param.summary())
-        main = Main(param, debug=False)
-
-        # main.profile()
-        # continue
-
-        with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
-            # Serialize and save the object to the file
-            pickle.dump(param, file)
-        scores = main.run()
-        if isinstance(scores, dict):
-            pass
-            getWriter().add_hparams(
-                # run_name=f"{param.model.name}_{param.dataset.value}",
-                hparam_dict=param.toDict(),
-                metric_dict=scores,
-                # global_step=i,
-            )
-        param.save_path = getSnapShotPath()
-        getWriter().add_text("summary", param.summary(), global_step=i)
-        # clearPAths()
-        getWriter().flush()

@@ -4,7 +4,7 @@ import importlib
 
 class Datasets(Enum):
     swat = "swat"
-    batdal = "batdal"
+    batadal = "batadal"
     msl = "msl"
     wadi = "wadi"
     dummy = "dummy"

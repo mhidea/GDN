@@ -51,7 +51,10 @@ class Params:
         """
         Gets or sets the trained size.
         """
-        self._trained = os.path.exists(self.best_path)
+        if self.save_path is None:
+            self._trained = False
+        else:
+            self._trained = os.path.exists(self.best_path)
         return self._trained
 
     @property
@@ -290,7 +293,6 @@ class Params:
         values = [
             str(d[key]) for key in headers
         ]  # Convert values to strings for display
-        single_items = {"save_path": self.save_path}
         tables = []
         # Split into chunks of at most 5 columns
         for i in range(0, len(headers), 5):
@@ -305,10 +307,6 @@ class Params:
             tables.append(table)
 
         # Join and return all tables
-        summary_output = (
-            "\n\n".join([f"# {key}\n\n{val}" for key, val in single_items.items()])
-            + "\n\n"
-        )
-
+        summary_output = ""
         summary_output += "\n\n".join(tables)
         return summary_output

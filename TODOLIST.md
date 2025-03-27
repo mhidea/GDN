@@ -1,3 +1,7 @@
 - add Result object based on task
 - Base class for modelsso that they can figure out which task they will run on
+- Create a markdown file for the whole run that describes range of variables in the grid and Also final results.
 
+
+c://
+```
