@@ -83,7 +83,8 @@ def construct_data(data, feature_map, labels=0):
 
 
 def build_loc_net(struc: dict, all_features: list, feature_map=[]) -> list:
-    """Creates fully connected adjacency matrix
+    """Creates fully connected adjacency matrix.
+    list of size (2 , Edges) list[0][i] is connected to list[1][i].
 
     Args:
         struc (dict): _description_
@@ -91,7 +92,7 @@ def build_loc_net(struc: dict, all_features: list, feature_map=[]) -> list:
         feature_map (list, optional): _description_. Defaults to [].
 
     Returns:
-        list: _description_
+        list: list of size (2 , Edges).
     """
     index_feature_map = feature_map
     edge_indexes = [[], []]

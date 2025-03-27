@@ -10,6 +10,7 @@ import math
 import torch.nn.functional as F
 
 from .graph_layer import GraphLayer
+from util.consts import Tasks
 
 
 def get_batch_edge_index(org_edge_index, batch_num, node_num):
@@ -86,29 +87,32 @@ class GDN(nn.Module):
         self,
         edge_index_sets,
         node_num,
-        dim=64,
+        embeding_dim=64,
         out_layer_inter_dim=256,
-        input_dim=10,
+        window_size=10,  # silding windows size
         out_layer_num=1,
         topk=20,
+        task: Tasks = Tasks.next_features,
     ):
 
         super(GDN, self).__init__()
-
+        self.task = task
         self.edge_index_sets = edge_index_sets
 
-        device = get_device()
+        # edge_index = edge_index_sets[0]
 
-        edge_index = edge_index_sets[0]
-
-        embed_dim = dim
-        self.embedding = nn.Embedding(node_num, embed_dim)
-        self.bn_outlayer_in = nn.BatchNorm1d(embed_dim)
+        self.embedding = nn.Embedding(node_num, embeding_dim)
+        self.bn_outlayer_in = nn.BatchNorm1d(embeding_dim)
 
         edge_set_num = len(edge_index_sets)
         self.gnn_layers = nn.ModuleList(
             [
-                GNNLayer(input_dim, dim, inter_dim=dim + embed_dim, heads=1)
+                GNNLayer(
+                    window_size,
+                    embeding_dim,
+                    inter_dim=embeding_dim + embeding_dim,
+                    heads=1,
+                )
                 for i in range(edge_set_num)
             ]
         )
@@ -118,7 +122,10 @@ class GDN(nn.Module):
         self.learned_graph = None
 
         self.out_layer = OutLayer(
-            dim * edge_set_num, node_num, out_layer_num, inter_num=out_layer_inter_dim
+            embeding_dim * edge_set_num,
+            node_num,
+            out_layer_num,
+            inter_num=out_layer_inter_dim,
         )
 
         self.cache_edge_index_sets = [None] * edge_set_num
@@ -155,7 +162,7 @@ class GDN(nn.Module):
 
             batch_edge_index = self.cache_edge_index_sets[i]
 
-            all_embeddings = self.embedding(torch.arange(node_num).to(device))
+            all_embeddings = self.embedding(torch.arange(node_num, device=device))
 
             weights_arr = all_embeddings.detach().clone()
             all_embeddings = all_embeddings.repeat(batch_num, 1)
@@ -201,7 +208,7 @@ class GDN(nn.Module):
         x = torch.cat(gcn_outs, dim=1)
         x = x.view(batch_num, node_num, -1)
 
-        indexes = torch.arange(0, node_num).to(device)
+        indexes = torch.arange(0, node_num, device=device)
         out = torch.mul(x, self.embedding(indexes))
 
         out = out.permute(0, 2, 1)
@@ -210,6 +217,7 @@ class GDN(nn.Module):
 
         out = self.dp(out)
         out = self.out_layer(out)
-        out = out.view(-1, node_num)
+        if self.task == Tasks.next_features:
+            out = out.view(-1, node_num)
 
         return out

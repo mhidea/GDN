@@ -14,7 +14,6 @@ decay=0
 
 
 path_pattern="${DATASET}"
-COMMENT="${DATASET}"
 
 EPOCH=30
 report='best'
@@ -27,7 +26,6 @@ if [[ "$gpu_n" == "cpu" ]]; then
         -slide_win $SLIDE_WIN \
         -batch $BATCH_SIZE \
         -epoch $EPOCH \
-        -comment $COMMENT \
         -random_seed $seed \
         -decay $decay \
         -dim $dim \
@@ -46,7 +44,6 @@ else
         -slide_win $SLIDE_WIN \
         -batch $BATCH_SIZE \
         -epoch $EPOCH \
-        -comment $COMMENT \
         -random_seed $seed \
         -decay $decay \
         -dim $dim \

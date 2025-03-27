@@ -14,7 +14,6 @@ set val_ratio=0.2
 set decay=0
 
 set path_pattern=%DATASET%
-set COMMENT=%DATASET%
 
 set EPOCH=30
 set report=best
@@ -27,7 +26,6 @@ if "%gpu_n%"=="cpu" (
         -slide_win %SLIDE_WIN% ^
         -batch %BATCH_SIZE% ^
         -epoch %EPOCH% ^
-        -comment %COMMENT% ^
         -random_seed %seed% ^
         -decay %decay% ^
         -dim %dim% ^
@@ -47,7 +45,6 @@ if "%gpu_n%"=="cpu" (
         -slide_win %SLIDE_WIN% ^
         -batch %BATCH_SIZE% ^
         -epoch %EPOCH% ^
-        -comment %COMMENT% ^
         -random_seed %seed% ^
         -decay %decay% ^
         -dim %dim% ^

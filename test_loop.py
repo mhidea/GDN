@@ -17,13 +17,13 @@ import tqdm
 
 from util.data import *
 from util.preprocess import *
+from util.env import get_param
 
 
 def test(model, dataloader: DataLoader):
-    global _tensorborad_path
     # test
     loss_func = nn.MSELoss(reduction="mean")
-    device = get_device()
+    device = get_param().device
 
     test_loss_list = []
     now = time.time()
@@ -40,37 +40,38 @@ def test(model, dataloader: DataLoader):
 
     model.eval()
 
-    i = 0
     acu_loss = 0
-    t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False)
-    for x, y, labels, edge_index in t:
-        x, y, labels, edge_index = [
-            item.to(device).float() for item in [x, y, labels, edge_index]
-        ]
+    t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False, position=1)
+    for windowed_x, y, next_label, edge_index in t:
+        # x, y, labels, edge_index = [
+        #     item.to(device) for item in [x, y, labels, edge_index]
+        # ]
 
         with torch.no_grad():
-            predicted = model(x, edge_index).float().to(device)
-            loss = loss_func(predicted, y)
+            predicted = model(
+                windowed_x.to(device, non_blocking=True),
+                edge_index.to(device, non_blocking=True),
+            )
+            loss = loss_func(predicted, y.to(device, non_blocking=True))
 
-            labels = labels.unsqueeze(1).repeat(1, predicted.shape[1])
+            next_label = next_label.unsqueeze(1).repeat(1, predicted.shape[1])
 
             if len(t_test_predicted_list) <= 0:
                 t_test_predicted_list = predicted
                 t_test_ground_list = y
-                t_test_labels_list = labels
+                t_test_labels_list = next_label
             else:
                 t_test_predicted_list = torch.cat(
                     (t_test_predicted_list, predicted), dim=0
                 )
                 t_test_ground_list = torch.cat((t_test_ground_list, y), dim=0)
-                t_test_labels_list = torch.cat((t_test_labels_list, labels), dim=0)
+                t_test_labels_list = torch.cat((t_test_labels_list, next_label), dim=0)
 
         test_loss_list.append(loss.item())
         acu_loss += loss.item()
 
-        i += 1
-        if i % 10000 == 1 and i > 1:
-            print(timeSincePlus(now, i / test_len))
+        # if i % 10000 == 1 and i > 1:
+        #     print(timeSincePlus(now, i / test_len))
     t.close()
     test_predicted_list = t_test_predicted_list.tolist()
     test_ground_list = t_test_ground_list.tolist()

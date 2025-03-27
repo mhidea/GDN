@@ -10,7 +10,7 @@ import torch.utils
 from util.time import *
 from util.env import *
 from sklearn.metrics import mean_squared_error
-from test import *
+from test_loop import *
 import torch.nn.functional as F
 import numpy as np
 from evaluate import (
@@ -21,7 +21,6 @@ from evaluate import (
 from sklearn.metrics import precision_score, recall_score, roc_auc_score, f1_score
 from torch.utils.data import DataLoader, random_split, Subset
 from scipy.stats import iqr
-from torch.utils.tensorboard.writer import SummaryWriter
 import os
 import tqdm
 
@@ -34,8 +33,6 @@ def loss_func(y_pred, y_true):
 
 def train(
     model=None,
-    save_path="",
-    config={},
     train_dataloader=None,
     val_dataloader=None,
     feature_map={},
@@ -44,19 +41,17 @@ def train(
     dataset_name="swat",
     train_dataset=None,
 ):
-    global _tensorborad_path
-    seed = config["seed"]
+    param = get_param()
+    seed = param.random_seed
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=0.001, weight_decay=config["decay"]
+        model.parameters(), lr=param.learning_rate, weight_decay=param.decay
     )
 
     now = time.time()
 
     train_loss_list = []
     cmp_loss_list = []
-
-    device = get_device()
 
     acu_loss = 0
     min_loss = 1e8
@@ -65,17 +60,15 @@ def train(
     best_prec = 0
 
     i = 0
-    epoch = config["epoch"]
+    epoch = param.epoch
     early_stop_win = 15
-
-    model.train()
+    model.to(param.device)
 
     log_interval = 1000
     stop_improve_count = 0
 
     dataloader = train_dataloader
 
-    w = SummaryWriter(TensorBoardPath())
     acu_loss = 0
     for i_epoch in range(epoch):
 
@@ -83,21 +76,23 @@ def train(
             dataloader,
             desc="epoc {} / {}".format((i_epoch + 1), epoch),
             postfix="{loss}",
+            position=0,
         )
         acu_loss = 0
         model.train()
-        i = 0
-        for x, labels, attack_labels, edge_index in t:
-            i = i + 1
-            _start = time.time()
+        for windowed_x, y, next_label, edge_index in t:
+            # _start = time.time()
 
-            x, labels, edge_index = [
-                item.float().to(device) for item in [x, labels, edge_index]
-            ]
+            # x, labels, edge_index = [
+            #     item.to(device, non_blocking=True) for item in [x, labels, edge_index]
+            # ]
 
-            optimizer.zero_grad()
-            out = model(x, edge_index).float().to(device)
-            loss = loss_func(out, labels)
+            out = model(
+                windowed_x.to(param.device, non_blocking=True),
+                edge_index.to(param.device, non_blocking=True),
+            )
+            loss = loss_func(out, y.to(param.device, non_blocking=True))
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 
@@ -105,18 +100,23 @@ def train(
             acu_loss += loss.item()
             t.set_postfix({"loss": loss.item()})
 
-            i += 1
-        w.add_scalar("loss", acu_loss, i_epoch)
         t.set_postfix({"loss": (acu_loss / len(dataloader))})
         t.close()
 
         # use val dataset to judge
         if val_dataloader is not None:
             val_loss, val_result = test(model, val_dataloader)
-            w.add_scalar("val_loss", val_loss, i_epoch)
+            getWriter().add_scalars(
+                main_tag=getTag("loss"),
+                global_step=i_epoch,
+                tag_scalar_dict={
+                    "train": (acu_loss / len(dataloader)),
+                    "val": val_loss,
+                },
+            )
 
             if val_loss < min_loss:
-                torch.save(model.state_dict(), save_path)
+                torch.save(model.state_dict(), param.best_path)
 
                 min_loss = val_loss
                 stop_improve_count = 0
@@ -128,7 +128,7 @@ def train(
 
         else:
             if acu_loss < min_loss:
-                torch.save(model.state_dict(), save_path)
+                torch.save(model.state_dict(), param.best_path)
                 min_loss = acu_loss
 
     return train_loss_list
