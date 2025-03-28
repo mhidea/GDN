@@ -15,13 +15,14 @@ from sklearn.preprocessing import MinMaxScaler
 
 from models.GDN import GDN
 import pickle
-from train_loop import train, loss_func
+from train_loop import train
 from test_loop import test
 from evaluate import (
     get_err_scores,
     get_best_performance_data,
     get_val_performance_data,
     get_full_err_scores,
+    createMetrics,
 )
 
 import os
@@ -46,7 +47,7 @@ class Main:
         self.datestr = None
 
         dataset_name = self.param.dataset.value
-
+        print(f"# DATASET \n\n*{self.param.dataset}*")
         train, test = self._prepareDF(scale, dataset=dataset_name)
 
         feature_map = get_feature_map(dataset_name)
@@ -94,7 +95,7 @@ class Main:
         edge_index_sets = []
         edge_index_sets.append(fc_edge_index)
 
-        self.model = self.param.model.getClass()(
+        self.model: torch.nn.Module = self.param.model.getClass()(
             edge_index_sets,
             node_num=len(feature_map),
             embeding_dim=self.param.embedding_dimension,
@@ -104,6 +105,7 @@ class Main:
             topk=self.param.topk,
             task=param.task,
         ).to(self.param.device)
+        # self.model = torch.compile(self.model, mode="reduce-overhead")
 
     def _prepareDF(self, scale, dataset):
         global _train_original
@@ -198,6 +200,11 @@ class Main:
                 train_dataset=self.train_dataset,
                 dataset_name=self.param.dataset.value,
             )
+        else:
+            print("Model already trained. Loading from saved file.")
+            self.model.load_state_dict(
+                torch.load(self.param.best_path, weights_only=True)
+            )
 
         # test
         best_model = self.model.to(self.param.device)
@@ -206,19 +213,7 @@ class Main:
             best_model, self.test_dataloader, threshold=val_avg_loss
         )
 
-        bs = BinaryStatScores().to(self.param.device)
-        bs.update(
-            test_result[0].to(self.param.device),
-            test_result[2].to(self.param.device),
-        )
-        result = bs.compute()
-        scores = {
-            "loss": test_avg_loss,
-            "tp": result[0],
-            "fp": result[1],
-            "tn": result[2],
-            "fn": result[3],
-        }
+        scores = createMetrics(test_result[0], test_result[2], val_avg_loss)
         # val_avg_loss, self.val_result = test(best_model, self.val_dataloader)
         # scores = self.get_score(self.test_result, self.val_result)
         if wasnt_trained:

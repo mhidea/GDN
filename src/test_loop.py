@@ -25,9 +25,10 @@ def test(model, dataloader: DataLoader, threshold=0.5):
     loss_func = nn.MSELoss(reduce=False)
     device = get_param().device
 
-    predicted_tensor = []
+    predicted_tensor = None
     ground_sensor_tensor = []
     ground_labels_tensor = []
+    loss_tensor = []
 
     model.eval()
 
@@ -46,28 +47,31 @@ def test(model, dataloader: DataLoader, threshold=0.5):
                 y_truth = next_label.to(param.device, non_blocking=True)
                 predicted = predicted.squeeze(-1)
             loss = loss_func(predicted, y_truth)
+            # loss = loss.mean(-1)
 
             # next_label = next_label.unsqueeze(1).repeat(1, predicted.shape[1])
-            if param.task is Tasks.next_sensors:
-                loss = loss.mean(-1)
-                pred = torch.where(loss > threshold, torch.tensor(1), torch.tensor(0))
-            elif param.task is Tasks.next_label:
-                pred = predicted
-            if len(predicted_tensor) <= 0:
-                predicted_tensor = pred
+
+            if predicted_tensor is None:
+                predicted_tensor = predicted
                 ground_sensor_tensor = y
                 ground_labels_tensor = next_label
+                loss_tensor = loss
             else:
-                predicted_tensor = torch.cat((predicted_tensor, pred), dim=0)
+                predicted_tensor = torch.cat((predicted_tensor, predicted), dim=0)
                 ground_sensor_tensor = torch.cat((ground_sensor_tensor, y), dim=0)
                 ground_labels_tensor = torch.cat(
                     (ground_labels_tensor, next_label), dim=0
                 )
-
+                loss_tensor = torch.cat((loss_tensor, loss), dim=0)
             acu_loss += loss.sum()
 
     t.close()
 
-    avg_loss = acu_loss / len(dataloader)
+    avg_loss = acu_loss / dataloader.dataset.__len__()
 
-    return avg_loss, [predicted_tensor, ground_sensor_tensor, ground_labels_tensor]
+    return avg_loss, [
+        predicted_tensor,
+        ground_sensor_tensor,
+        ground_labels_tensor,
+        loss_tensor,
+    ]

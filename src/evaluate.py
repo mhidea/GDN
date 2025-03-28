@@ -1,21 +1,25 @@
 from util.data import *
 import numpy as np
 from sklearn.metrics import precision_score, recall_score, roc_auc_score, f1_score
+import torch
+from torchmetrics.classification import BinaryStatScores
+from util.env import get_param
+from util.consts import Tasks
 
 
 def get_full_err_scores(test_result, val_result):
     np_test_result = np.array(test_result)
     np_val_result = np.array(val_result)
 
-    all_scores =  None
+    all_scores = None
     all_normals = None
     feature_num = np_test_result.shape[-1]
 
     labels = np_test_result[2, :, 0].tolist()
 
     for i in range(feature_num):
-        test_re_list = np_test_result[:2,:,i]
-        val_re_list = np_val_result[:2,:,i]
+        test_re_list = np_test_result[:2, :, i]
+        val_re_list = np_val_result[:2, :, i]
 
         scores = get_err_scores(test_re_list, val_re_list)
         normal_dist = get_err_scores(val_re_list, val_re_list)
@@ -24,25 +28,20 @@ def get_full_err_scores(test_result, val_result):
             all_scores = scores
             all_normals = normal_dist
         else:
-            all_scores = np.vstack((
-                all_scores,
-                scores
-            ))
-            all_normals = np.vstack((
-                all_normals,
-                normal_dist
-            ))
+            all_scores = np.vstack((all_scores, scores))
+            all_normals = np.vstack((all_normals, normal_dist))
 
     return all_scores, all_normals
 
 
 def get_final_err_scores(test_result, val_result):
-    full_scores, all_normals = get_full_err_scores(test_result, val_result, return_normal_scores=True)
+    full_scores, all_normals = get_full_err_scores(
+        test_result, val_result, return_normal_scores=True
+    )
 
     all_scores = np.max(full_scores, axis=0)
 
     return all_scores
-
 
 
 def get_err_scores(test_res, val_res):
@@ -51,44 +50,52 @@ def get_err_scores(test_res, val_res):
 
     n_err_mid, n_err_iqr = get_err_median_and_iqr(test_predict, test_gt)
 
-    test_delta = np.abs(np.subtract(
-                        np.array(test_predict).astype(np.float64), 
-                        np.array(test_gt).astype(np.float64)
-                    ))
-    epsilon=1e-2
+    test_delta = np.abs(
+        np.subtract(
+            np.array(test_predict).astype(np.float64),
+            np.array(test_gt).astype(np.float64),
+        )
+    )
+    epsilon = 1e-2
 
-    err_scores = (test_delta - n_err_mid) / ( np.abs(n_err_iqr) +epsilon)
+    err_scores = (test_delta - n_err_mid) / (np.abs(n_err_iqr) + epsilon)
 
     smoothed_err_scores = np.zeros(err_scores.shape)
     before_num = 3
     for i in range(before_num, len(err_scores)):
-        smoothed_err_scores[i] = np.mean(err_scores[i-before_num:i+1])
+        smoothed_err_scores[i] = np.mean(err_scores[i - before_num : i + 1])
 
-    
     return smoothed_err_scores
-
 
 
 def get_loss(predict, gt):
     return eval_mseloss(predict, gt)
 
+
 def get_f1_scores(total_err_scores, gt_labels, topk=1):
-    print('total_err_scores', total_err_scores.shape)
+    print("total_err_scores", total_err_scores.shape)
     # remove the highest and lowest score at each timestep
     total_features = total_err_scores.shape[0]
 
     # topk_indices = np.argpartition(total_err_scores, range(total_features-1-topk, total_features-1), axis=0)[-topk-1:-1]
-    topk_indices = np.argpartition(total_err_scores, range(total_features-topk-1, total_features), axis=0)[-topk:]
-    
+    topk_indices = np.argpartition(
+        total_err_scores, range(total_features - topk - 1, total_features), axis=0
+    )[-topk:]
+
     topk_indices = np.transpose(topk_indices)
 
     total_topk_err_scores = []
-    topk_err_score_map=[]
+    topk_err_score_map = []
     # topk_anomaly_sensors = []
 
     for i, indexs in enumerate(topk_indices):
-       
-        sum_score = sum( score for k, score in enumerate(sorted([total_err_scores[index, i] for j, index in enumerate(indexs)])) )
+
+        sum_score = sum(
+            score
+            for k, score in enumerate(
+                sorted([total_err_scores[index, i] for j, index in enumerate(indexs)])
+            )
+        )
 
         total_topk_err_scores.append(sum_score)
 
@@ -96,15 +103,20 @@ def get_f1_scores(total_err_scores, gt_labels, topk=1):
 
     return final_topk_fmeas
 
+
 def get_val_performance_data(total_err_scores, normal_scores, gt_labels, topk=1):
     total_features = total_err_scores.shape[0]
 
-    topk_indices = np.argpartition(total_err_scores, range(total_features-topk-1, total_features), axis=0)[-topk:]
+    topk_indices = np.argpartition(
+        total_err_scores, range(total_features - topk - 1, total_features), axis=0
+    )[-topk:]
 
     total_topk_err_scores = []
-    topk_err_score_map=[]
+    topk_err_score_map = []
 
-    total_topk_err_scores = np.sum(np.take_along_axis(total_err_scores, topk_indices, axis=0), axis=0)
+    total_topk_err_scores = np.sum(
+        np.take_along_axis(total_err_scores, topk_indices, axis=0), axis=0
+    )
 
     thresold = np.max(normal_scores)
 
@@ -120,7 +132,6 @@ def get_val_performance_data(total_err_scores, normal_scores, gt_labels, topk=1)
 
     f1 = f1_score(gt_labels, pred_labels)
 
-
     auc_score = roc_auc_score(gt_labels, total_topk_err_scores)
 
     return f1, pre, rec, auc_score, thresold
@@ -131,14 +142,20 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
     total_features = total_err_scores.shape[0]
 
     # topk_indices = np.argpartition(total_err_scores, range(total_features-1-topk, total_features-1), axis=0)[-topk-1:-1]
-    topk_indices = np.argpartition(total_err_scores, range(total_features-topk-1, total_features), axis=0)[-topk:]
+    topk_indices = np.argpartition(
+        total_err_scores, range(total_features - topk - 1, total_features), axis=0
+    )[-topk:]
 
     total_topk_err_scores = []
-    topk_err_score_map=[]
+    topk_err_score_map = []
 
-    total_topk_err_scores = np.sum(np.take_along_axis(total_err_scores, topk_indices, axis=0), axis=0)
+    total_topk_err_scores = np.sum(
+        np.take_along_axis(total_err_scores, topk_indices, axis=0), axis=0
+    )
 
-    final_topk_fmeas ,thresolds = eval_scores(total_topk_err_scores, gt_labels, 400, return_thresold=True)
+    final_topk_fmeas, thresolds = eval_scores(
+        total_topk_err_scores, gt_labels, 400, return_thresold=True
+    )
 
     th_i = final_topk_fmeas.index(max(final_topk_fmeas))
     thresold = thresolds[th_i]
@@ -157,3 +174,58 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
 
     return max(final_topk_fmeas), pre, rec, auc_score, thresold
 
+
+def createMetrics(
+    predicted_labels: torch.Tensor,
+    ground_truth_labels: torch.Tensor,
+    threshold: float = 0.5,
+):
+    param = get_param()
+    device = param.device
+    if param.task is Tasks.next_sensors:
+        pred = torch.where(
+            predicted_labels.sum(-1) > threshold, torch.tensor(1), torch.tensor(0)
+        )
+        bs = BinaryStatScores().to(device)
+    elif param.task is Tasks.next_label:
+        bs = BinaryStatScores(threshold=threshold).to(device)
+
+    bs.update(
+        ground_truth_labels.to(device),
+        pred.to(device),
+    )
+    metrics_tensor = bs.compute()
+    # Accuracy
+    accuracy = (metrics_tensor[0] + metrics_tensor[2]) / metrics_tensor.sum()
+
+    # Precision
+    precision = (
+        metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[1])
+        if (metrics_tensor[0] + metrics_tensor[1]) != 0
+        else 0.0
+    )
+
+    # Recall
+    recall = (
+        metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[3])
+        if (metrics_tensor[0] + metrics_tensor[3]) != 0
+        else 0.0
+    )
+
+    # F1 Score
+    f1_score = (
+        2 * (precision * recall) / (precision + recall)
+        if (precision + recall) != 0
+        else 0.0
+    )
+    metrics = {
+        "TP": metrics_tensor[0].item(),
+        "FP": metrics_tensor[1].item(),
+        "TN": metrics_tensor[2].item(),
+        "FN": metrics_tensor[3].item(),
+        "Accuracy": accuracy.item(),
+        "Precision": precision,
+        "Recall": recall,
+        "F1": f1_score,
+    }
+    return metrics

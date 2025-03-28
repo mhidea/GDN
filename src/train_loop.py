@@ -4,16 +4,10 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import time
 import torch.utils
-from sklearn.metrics import mean_squared_error
 from test_loop import *
 import torch.nn.functional as F
 import numpy as np
-from evaluate import (
-    get_best_performance_data,
-    get_val_performance_data,
-    get_full_err_scores,
-)
-from sklearn.metrics import precision_score, recall_score, roc_auc_score, f1_score
+from evaluate import createMetrics
 from torch.utils.data import DataLoader, random_split, Subset
 from scipy.stats import iqr
 import os
@@ -23,10 +17,12 @@ from util.env import *
 from util.consts import Tasks
 
 
-def loss_func(y_pred, y_true):
-    loss = F.mse_loss(y_pred, y_true, reduction="sum")
+# def loss_func(y_pred, y_true):
+#     loss = F.mse_loss(y_pred, y_true, reduction="sum")
 
-    return loss
+#     return loss
+
+filter_keis = ["TP", "FP", "TN", "FN"]
 
 
 def train(
@@ -58,6 +54,7 @@ def train(
     dataloader = train_dataloader
 
     acu_loss = 0
+    loss_func = nn.MSELoss(reduction="sum")
     for i_epoch in range(epoch):
 
         t = tqdm.tqdm(
@@ -68,8 +65,11 @@ def train(
         )
         acu_loss = 0
         model.train()
+        i = len(dataloader)
+        total_samples = dataloader.dataset.__len__()
+        avg_loss = 0
         for windowed_x, y, next_label, edge_index in t:
-
+            i -= 1
             if param.task is Tasks.next_sensors:
                 y_truth = y.to(param.device, non_blocking=True)
             elif param.task is Tasks.next_label:
@@ -85,19 +85,35 @@ def train(
             optimizer.step()
 
             acu_loss += loss.item()
-            t.set_postfix({"loss": loss.item() / windowed_x.shape[0]})
-
-        t.set_postfix({"loss": (acu_loss / len(dataloader))})
-        t.close()
-
+            t.set_postfix({"loss": (loss.item() / windowed_x.shape[0])})
+            if i == 0:
+                avg_loss = acu_loss / total_samples
+                t.set_postfix({"loss": avg_loss})
+                t.close()
         # use val dataset to judge
         if val_dataloader is not None:
             val_loss, val_result = test(model, val_dataloader)
+            scores: dict = createMetrics(val_result[0], val_result[2], avg_loss)
+            stats_dict = {key: scores[key] for key in filter_keis}
+            metrics_dict = {
+                key: scores[key] for key in scores.keys() if key not in filter_keis
+            }
+
+            getWriter().add_scalars(
+                main_tag=getTag("val_stats/epoch_"),
+                global_step=i_epoch,
+                tag_scalar_dict=stats_dict,
+            )
+            getWriter().add_scalars(
+                main_tag=getTag("val_metrics/epoch_"),
+                global_step=i_epoch,
+                tag_scalar_dict=metrics_dict,
+            )
             getWriter().add_scalars(
                 main_tag=getTag("loss"),
                 global_step=i_epoch,
                 tag_scalar_dict={
-                    "train": (acu_loss / len(dataloader)),
+                    "train": avg_loss,
                     "val": val_loss,
                 },
             )

@@ -12,29 +12,31 @@ if __name__ == "__main__":
     param = Params()
     set_param(param)
     param.task = Tasks.next_sensors
-    param.dataset = Datasets.batadal
+    param.dataset = Datasets.swat
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
-    param.epoch = 100
+    param.epoch = 15
 
     # Creating grid search
     batches = [128]
-    windows = [5, 10]
-    dims = [64, 128]
-    topks = [5, 10]
-    out_layers = [16]
+    windows = [5]
+    embedding_dimensions = [64]
+    topks = [15]
+    out_layers = [64]
 
     # batches=[64]
     # windows=[8]
     # dims=[32]
     # topks=[12]
     # out_layers=[128]
-    grid = itertools.product(batches, windows, dims, topks, out_layers)
+    grid = itertools.product(batches, windows, embedding_dimensions, topks, out_layers)
     createPaths(param.model, param.dataset)
     createWriter(TensorBoardPath())
     grid_strig = "# Grid Params"
     grid_strig += "\n\n- *batches*: " + " , ".join([str(item) for item in batches])
     grid_strig += "\n\n- *windows*: " + " , ".join([str(item) for item in windows])
-    grid_strig += "\n\n- *dims*: " + " , ".join([str(item) for item in dims])
+    grid_strig += "\n\n- *embedding_dimensions*: " + " , ".join(
+        [str(item) for item in embedding_dimensions]
+    )
     grid_strig += "\n\n- *topks*: " + " , ".join([str(item) for item in topks])
     grid_strig += "\n\n- *out_layers*: " + " , ".join(
         [str(item) for item in out_layers]
@@ -43,7 +45,7 @@ if __name__ == "__main__":
         f"\n\n## TensorBoard Path \n\n```console\n\n{TensorBoardPath()}\n\n```"
     )
     getWriter().add_text(tag="Grid", text_string=grid_strig, global_step=0)
-    for i, (batch, window, dim, topk, out_layer) in enumerate(grid):
+    for i, (batch, window, embedding_dimension, topk, out_layer) in enumerate(grid):
         setTag(i)
         print(
             i,
@@ -51,8 +53,8 @@ if __name__ == "__main__":
             batch,
             "window",
             window,
-            "dim",
-            dim,
+            "embedding_dimension",
+            embedding_dimension,
             "topk",
             topk,
             "out_layer",
@@ -60,7 +62,7 @@ if __name__ == "__main__":
         )
         param.batch = batch
         param.window_length = window
-        param.embedding_dimension = dim
+        param.embedding_dimension = embedding_dimension
         param.topk = topk
         param.out_layer_inter_dim = out_layer
         param.save_path = getSnapShotPath()
