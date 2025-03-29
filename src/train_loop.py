@@ -75,12 +75,12 @@ def train(
             elif param.task is Tasks.next_label:
                 y_truth = next_label.unsqueeze(1).to(param.device, non_blocking=True)
 
+            optimizer.zero_grad(set_to_none=True)
             out = model(
                 windowed_x.to(param.device, non_blocking=True),
                 edge_index.to(param.device, non_blocking=True),
             )
             loss = loss_func(out, y_truth)
-            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
 

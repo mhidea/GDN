@@ -14,7 +14,7 @@ if __name__ == "__main__":
     param.task = Tasks.next_sensors
     param.dataset = Datasets.swat
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
-    param.epoch = 15
+    param.epoch = 30
 
     # Creating grid search
     batches = [128]
