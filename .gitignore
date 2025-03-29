@@ -9,3 +9,5 @@ board/
 data/
 snapshot/
 profiler/
+*.pyc
+**/__pycache__
