@@ -125,7 +125,8 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
     actuators = []
     consts = {}
     sensors = []
-    for col in dataFrame.columns:
+    columns = [col for col in dataFrame.columns if col not in ["datetime"]]
+    for col in columns:
         l = len(dataFrame[col].unique())
         if l == 2:
             if ignor_labels is None:

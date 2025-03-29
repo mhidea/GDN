@@ -117,23 +117,19 @@ class Main:
             _test_original = pd.read_csv(
                 f"./data/{dataset}/test.csv", sep=",", index_col=0
             )
-            col, _, _ = findSensorActuator(_train_original)
-            print(col)
+            sensors, _, _ = findSensorActuator(_train_original)
+            print(sensors)
             if scale:
                 # Initialize the MinMaxScaler
                 scaler = MinMaxScaler()
 
                 # Fit the scaler on the first dataset
-                scaler.fit(_train_original)
+                scaler.fit(_train_original[sensors])
 
                 # Transform both datasets using the same scaler
-                _train_original[_train_original.columns] = scaler.transform(
-                    _train_original[_train_original.columns]
-                )
+                _train_original[sensors] = scaler.transform(_train_original[sensors])
 
-                _test_original[_train_original.columns] = scaler.transform(
-                    _test_original[_train_original.columns]
-                )
+                _test_original[sensors] = scaler.transform(_test_original[sensors])
             if "attack" in _train_original.columns:
                 _train_original = _train_original.drop(columns=["attack"])
         return _train_original, _test_original
