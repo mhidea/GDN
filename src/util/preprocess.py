@@ -2,6 +2,7 @@
 import numpy as np
 import re
 import pandas as pd
+import torch
 
 
 def get_most_common_features(target, all_features, max=3, min=3):
@@ -125,7 +126,9 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
     actuators = []
     consts = {}
     sensors = []
-    columns = [col for col in dataFrame.columns if col not in ["datetime"]]
+    columns = [
+        col for col in dataFrame.columns if col.strip() not in ["datetime", "Timestamp"]
+    ]
     for col in columns:
         l = len(dataFrame[col].unique())
         if l == 2:
@@ -146,3 +149,13 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
     print("#####################################")
 
     return sensors, actuators, consts
+
+
+def fully_conneted_adj(node_num):
+    edge_indexes = [[], []]
+    for i in range(node_num):
+        for j in range(node_num):
+            if i != j:
+                edge_indexes[0].append(i)
+                edge_indexes[1].append(j)
+    return torch.tensor(edge_indexes, dtype=torch.long)

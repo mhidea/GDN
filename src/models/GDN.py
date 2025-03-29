@@ -9,6 +9,7 @@ from util.env import *
 from util.time import *
 
 from .graph_layer import GraphLayer
+from util.preprocess import fully_conneted_adj
 
 
 def get_batch_edge_index(org_edge_index, batch_num, node_num):
@@ -81,32 +82,27 @@ class GNNLayer(nn.Module):
 
 
 class GDN(BaseModel):
-    def __init__(
-        self,
-        edge_index_sets,
-        embeding_dim=64,
-        out_layer_inter_dim=256,
-        window_size=10,  # silding windows size
-        out_layer_num=1,
-        topk=20,
-        **kwargs
-    ):
+    def __init__(self, **kwargs):
         super(GDN, self).__init__(**kwargs)
+        edge_index = fully_conneted_adj(self.node_num).to(
+            self.param.device, non_blocking=True
+        )
 
-        self.edge_index_sets = edge_index_sets
+        self.edge_index_sets = [edge_index]
 
         # edge_index = edge_index_sets[0]
 
-        self.embedding = nn.Embedding(self.node_num, embeding_dim)
-        self.bn_outlayer_in = nn.BatchNorm1d(embeding_dim)
+        self.embedding = nn.Embedding(self.node_num, self.param.embedding_dimension)
+        self.bn_outlayer_in = nn.BatchNorm1d(self.param.embedding_dimension)
 
-        edge_set_num = len(edge_index_sets)
+        edge_set_num = len(self.edge_index_sets)
         self.gnn_layers = nn.ModuleList(
             [
                 GNNLayer(
-                    window_size,
-                    embeding_dim,
-                    inter_dim=embeding_dim + embeding_dim,
+                    self.param.window_length,
+                    self.param.embedding_dimension,
+                    inter_dim=self.param.embedding_dimension
+                    + self.param.embedding_dimension,
                     heads=1,
                 )
                 for i in range(edge_set_num)
@@ -114,14 +110,14 @@ class GDN(BaseModel):
         )
 
         self.node_embedding = None
-        self.topk = topk
+        self.topk = self.param.topk
         self.learned_graph = None
 
         self.out_layer = OutLayer(
-            embeding_dim * edge_set_num,
+            self.param.embedding_dimension * edge_set_num,
             self.node_num,
-            out_layer_num,
-            inter_num=out_layer_inter_dim,
+            self.param.out_layer_num,
+            inter_num=self.param.out_layer_inter_dim,
         )
 
         self.cache_edge_index_sets = [None] * edge_set_num
@@ -134,7 +130,7 @@ class GDN(BaseModel):
     def init_params(self):
         nn.init.kaiming_uniform_(self.embedding.weight, a=math.sqrt(5))
 
-    def pre_forward(self, data, org_edge_index):
+    def pre_forward(self, data):
         x = data.clone().detach()
         edge_index_sets = self.edge_index_sets
 

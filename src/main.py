@@ -51,12 +51,12 @@ class Main:
         train, test = self._prepareDF(scale, dataset=dataset_name)
 
         feature_map = get_feature_map(dataset_name)
-        fc_struc = get_fully_connected_graph_struc(dataset_name)
+        # fc_struc = get_fully_connected_graph_struc(dataset_name)
 
-        fc_edge_index = build_loc_net(
-            fc_struc, list(train.columns), feature_map=feature_map
-        )
-        fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.long)
+        # fc_edge_index = build_loc_net(
+        #     fc_struc, list(train.columns), feature_map=feature_map
+        # )
+        # fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.long)
 
         self.feature_map = feature_map
 
@@ -67,13 +67,11 @@ class Main:
 
         train_dataset = TimeDataset(
             train_dataset_indata,
-            fc_edge_index,
             mode="train",
             param=self.param,
         )
         test_dataset = TimeDataset(
             test_dataset_indata,
-            fc_edge_index,
             mode="test",
             param=self.param,
         )
@@ -92,18 +90,8 @@ class Main:
             pin_memory=False,
         )
 
-        edge_index_sets = []
-        edge_index_sets.append(fc_edge_index)
-
         self.model: torch.nn.Module = self.param.model.getClass()(
-            edge_index_sets,
             node_num=len(feature_map),
-            embeding_dim=self.param.embedding_dimension,
-            window_size=self.param.window_length,
-            out_layer_num=self.param.out_layer_num,
-            out_layer_inter_dim=self.param.out_layer_inter_dim,
-            topk=self.param.topk,
-            task=param.task,
         ).to(self.param.device)
         # self.model = torch.compile(self.model, mode="reduce-overhead")
 

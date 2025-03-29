@@ -9,10 +9,9 @@ from util.params import Params
 
 
 class TimeDataset(Dataset):
-    def __init__(self, raw_data, edge_index, param: Params, mode="train"):
+    def __init__(self, raw_data, param: Params, mode="train"):
         self.raw_data = raw_data
         self.param = param
-        self.edge_index = edge_index.long()
         self.mode = mode
 
         x_data = raw_data[:-1]
@@ -61,16 +60,9 @@ class TimeDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        windowed_x = self.x[idx]
-        y = self.y[idx]
-
-        edge_index = self.edge_index
+        windowed_sensors = self.x[idx]
+        netx_seonsors = self.y[idx]
 
         next_label = self.labels[idx]
 
-        return (
-            windowed_x,
-            y,
-            next_label,
-            edge_index,
-        )
+        return (windowed_sensors, netx_seonsors, next_label)

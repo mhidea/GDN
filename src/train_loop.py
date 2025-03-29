@@ -70,14 +70,11 @@ def train(
         total_samples = dataloader.dataset.__len__()
         avg_loss = 0
         threshold = 0
-        for windowed_x, y, next_label, edge_index in t:
+        for windowed_x, y, next_label in t:
             i -= 1
             y_truth = param.y_truth(y, next_label)
             optimizer.zero_grad(set_to_none=True)
-            out = model(
-                windowed_x.to(param.device, non_blocking=True),
-                edge_index.to(param.device, non_blocking=True),
-            )
+            out = model(windowed_x.to(param.device, non_blocking=True))
             loss = loss_func(out, y_truth)
             if param.task is Tasks.next_label:
                 _m = out.max()

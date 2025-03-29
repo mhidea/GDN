@@ -34,13 +34,10 @@ def test(model, dataloader: DataLoader):
 
     acu_loss = 0
     t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False, position=1)
-    for windowed_x, y, next_label, edge_index in t:
+    for windowed_x, y, next_label in t:
 
         with torch.no_grad():
-            predicted = model(
-                windowed_x.to(device, non_blocking=True),
-                edge_index.to(device, non_blocking=True),
-            )
+            predicted = model(windowed_x.to(device, non_blocking=True))
             if param.task is Tasks.next_sensors:
                 y_truth = y.to(param.device, non_blocking=True)
             elif param.task is Tasks.next_label:
