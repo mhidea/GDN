@@ -14,7 +14,9 @@ def get_feature_map(dataset_name: str):
     feature_file = open(f"./data/{dataset_name}/list.txt", "r")
     feature_list = []
     for ft in feature_file:
-        feature_list.append(ft.strip())
+        ft: str = ft.strip()
+        if ft != "":
+            feature_list.append(ft)
 
     return feature_list
 

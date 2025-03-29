@@ -137,8 +137,11 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
             consts[col] = dataFrame.iloc[0][col]
         else:
             sensors.append(col)
+    print("#####################################")
     print("sensors count: ", len(sensors))
     print("actuators count: ", len(actuators))
     print("consts count: ", len(consts))
+    print("consts: ", consts)
+    print("#####################################")
 
     return sensors, actuators, consts

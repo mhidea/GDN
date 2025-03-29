@@ -54,7 +54,8 @@ def train(
     dataloader = train_dataloader
 
     acu_loss = 0
-    loss_func = nn.MSELoss(reduction="sum")
+    loss_func = param.loss_function()
+
     for i_epoch in range(epoch):
 
         t = tqdm.tqdm(
@@ -68,19 +69,20 @@ def train(
         i = len(dataloader)
         total_samples = dataloader.dataset.__len__()
         avg_loss = 0
+        threshold = 0
         for windowed_x, y, next_label, edge_index in t:
             i -= 1
-            if param.task is Tasks.next_sensors:
-                y_truth = y.to(param.device, non_blocking=True)
-            elif param.task is Tasks.next_label:
-                y_truth = next_label.unsqueeze(1).to(param.device, non_blocking=True)
-
+            y_truth = param.y_truth(y, next_label)
             optimizer.zero_grad(set_to_none=True)
             out = model(
                 windowed_x.to(param.device, non_blocking=True),
                 edge_index.to(param.device, non_blocking=True),
             )
             loss = loss_func(out, y_truth)
+            if param.task is Tasks.next_label:
+                _m = out.max()
+                threshold = _m if _m > threshold else threshold
+            loss = loss.sum()
             loss.backward()
             optimizer.step()
 
@@ -91,9 +93,11 @@ def train(
                 t.set_postfix({"loss": avg_loss})
                 t.close()
         # use val dataset to judge
+        if param.task is Tasks.next_sensors:
+            threshold = avg_loss
         if val_dataloader is not None:
             val_loss, val_result = test(model, val_dataloader)
-            scores: dict = createMetrics(val_result[0], val_result[2], avg_loss)
+            scores: dict = createMetrics(val_result[0], val_result[2], threshold)
             stats_dict = {key: scores[key] for key in filter_keis}
             metrics_dict = {
                 key: scores[key] for key in scores.keys() if key not in filter_keis
@@ -119,7 +123,7 @@ def train(
             )
 
             if val_loss < min_loss:
-                torch.save(model.state_dict(), param.best_path)
+                torch.save(model.state_dict(), param.best_path())
 
                 min_loss = val_loss
                 stop_improve_count = 0
@@ -131,5 +135,5 @@ def train(
 
         else:
             if acu_loss < min_loss:
-                torch.save(model.state_dict(), param.best_path)
+                torch.save(model.state_dict(), param.best_path())
                 min_loss = acu_loss

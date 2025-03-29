@@ -176,18 +176,18 @@ class Main:
                     ).float()
                     # .to(get_device())
                 )
-                loss = loss_func(out, labels)
+                loss = self.param.loss_function(out, labels)
                 optimizer.zero_grad(set_to_none=True)
                 loss.backward()
                 optimizer.step()
                 prof.step()
 
     def _loadBestModel(self):
-        self.model.load_state_dict(torch.load(open(self.param.best_path, "rb")))
+        self.model.load_state_dict(torch.load(open(self.param.best_path(), "rb")))
 
     def run(self, step: int = 0):
         wasnt_trained = False
-        if not self.param.trained:
+        if not self.param.trained():
             wasnt_trained = True
             print("Model Not Found. Training new model.")
             train(
@@ -203,15 +203,13 @@ class Main:
         else:
             print("Model already trained. Loading from saved file.")
             self.model.load_state_dict(
-                torch.load(self.param.best_path, weights_only=True)
+                torch.load(self.param.best_path(), weights_only=True)
             )
 
         # test
         best_model = self.model.to(self.param.device)
         val_avg_loss, _ = test(best_model, self.val_dataloader)
-        test_avg_loss, test_result = test(
-            best_model, self.test_dataloader, threshold=val_avg_loss
-        )
+        test_avg_loss, test_result = test(best_model, self.test_dataloader)
 
         scores = createMetrics(test_result[0], test_result[2], val_avg_loss)
         # val_avg_loss, self.val_result = test(best_model, self.val_dataloader)

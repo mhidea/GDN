@@ -23,12 +23,12 @@ class BaseModel(torch.nn.Module):
 
     def forward(self, data, org_edge_index):
         out = self.pre_forward(data, org_edge_index)
-        # Out shape is batch,nodes=sensors,1
+        # Out shape is (batch,nodes=sensors,windows)
 
         if self.task == Tasks.next_sensors:
-            out = out.view(-1, self.node_num)
+            out = out.squeeze(-1)
         elif self.task == Tasks.next_label:
-            out = out.view(-1, self.node_num)
+            out = out.squeeze(-1)
             out = self.nodes_to_label(out)
             out = torch.nn.functional.sigmoid(out)
         return out

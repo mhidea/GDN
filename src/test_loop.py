@@ -19,11 +19,11 @@ from util.env import *
 from util.consts import Tasks
 
 
-def test(model, dataloader: DataLoader, threshold=0.5):
+def test(model, dataloader: DataLoader):
     # test
     param = get_param()
-    loss_func = nn.MSELoss(reduce=False)
-    device = get_param().device
+    loss_func = param.loss_function()
+    device = param.device
 
     predicted_tensor = None
     ground_sensor_tensor = []
@@ -47,9 +47,6 @@ def test(model, dataloader: DataLoader, threshold=0.5):
                 y_truth = next_label.to(param.device, non_blocking=True)
                 predicted = predicted.squeeze(-1)
             loss = loss_func(predicted, y_truth)
-            # loss = loss.mean(-1)
-
-            # next_label = next_label.unsqueeze(1).repeat(1, predicted.shape[1])
 
             if predicted_tensor is None:
                 predicted_tensor = predicted

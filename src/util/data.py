@@ -173,19 +173,31 @@ def getAttacks(df: pd.DataFrame, label) -> np.ndarray:
 
 
 def createDummyDataset(samples: int, coulmns=3):
-    data_normal = {
+    csv_folder = "./data/dummy"
+    if not os.path.exists(csv_folder):
+        os.makedirs(csv_folder)
+
+    data_train = {
         "datetime": np.arange(1, samples + 1),
         "attack": np.zeros_like(samples),
     }
-    data_abnormal = {
+    data_test = {
         "datetime": np.arange(1, samples + 1),
         "attack": np.random.randint(0, 2, samples),
     }
-    for col in range(coulmns):
-        data_normal["col_" + col] = np.random.random(samples)
-        data_abnormal["col_" + col] = np.random.random(samples)
-    df = pd.DataFrame(data_normal)
+    if os.path.exists(f"{csv_folder}/list.txt"):
+        os.remove(f"{csv_folder}/list.txt")
+    list_file = open(f"{csv_folder}/list.txt", "w")
+    cols = [f"col_{col}" for col in range(coulmns)]
+    list_file.write("\n".join(cols))
+    list_file.close()
+    for col in cols:
+        data_train[col] = np.random.random(samples)
+        data_test[col] = np.random.random(samples)
+
+    df_train = pd.DataFrame(data_train)
+    df_test = pd.DataFrame(data_test)
 
     # Save the DataFrame to a CSV file
-    csv_file_name = "./data/dummy/test.csv"
-    df.to_csv(csv_file_name, index=False)
+    df_train.to_csv(f"{csv_folder}/train.csv", index=False)
+    df_test.to_csv(f"{csv_folder}/test.csv", index=False)

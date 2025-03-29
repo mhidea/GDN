@@ -178,7 +178,7 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
 def createMetrics(
     predicted_labels: torch.Tensor,
     ground_truth_labels: torch.Tensor,
-    threshold: float = 0.5,
+    threshold=0.5,
 ):
     param = get_param()
     device = param.device
@@ -188,12 +188,10 @@ def createMetrics(
         )
         bs = BinaryStatScores().to(device)
     elif param.task is Tasks.next_label:
-        bs = BinaryStatScores(threshold=threshold).to(device)
+        bs = BinaryStatScores(threshold=float(threshold)).to(device)
+        pred = predicted_labels
 
-    bs.update(
-        ground_truth_labels.to(device),
-        pred.to(device),
-    )
+    bs.update(pred.to(device), ground_truth_labels.to(device))
     metrics_tensor = bs.compute()
     # Accuracy
     accuracy = (metrics_tensor[0] + metrics_tensor[2]) / metrics_tensor.sum()

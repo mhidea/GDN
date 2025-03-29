@@ -33,7 +33,6 @@ class Params:
         self._embedding_dimension = embedding_dimension
         self._stride = stride
         self._save_path = save_path
-        self._trained = False
         self._dataset = dataset
         self._random_seed = random_seed
         self._out_layer_num = out_layer_num
@@ -45,17 +44,6 @@ class Params:
         self._model = model
         self._task = task
         self._device = device
-
-    @property
-    def trained(self) -> bool:
-        """
-        Gets or sets the trained size.
-        """
-        if self.save_path is None:
-            self._trained = False
-        else:
-            self._trained = os.path.exists(self.best_path)
-        return self._trained
 
     @property
     def batch(self) -> int:
@@ -111,13 +99,6 @@ class Params:
     @stride.setter
     def stride(self, value: int):
         self._stride = value
-
-    @property
-    def best_path(self) -> str:
-        """
-        Gets or sets the file save path.
-        """
-        return self._save_path + "/best.pt"
 
     @property
     def save_path(self) -> str:
@@ -310,3 +291,31 @@ class Params:
         summary_output = ""
         summary_output += "\n\n".join(tables)
         return summary_output
+
+    def trained(self) -> bool:
+        """
+        Gets or sets the trained size.
+        """
+        if self.save_path is None:
+            _trained = False
+        else:
+            _trained = os.path.exists(self.best_path())
+        return _trained
+
+    def best_path(self) -> str:
+        """
+        Gets or sets the file save path.
+        """
+        return self._save_path + "/best.pt"
+
+    def loss_function(self) -> torch.nn.Module:
+        if self.task is Tasks.next_sensors:
+            return torch.nn.MSELoss(reduce=False)
+        if self.task is Tasks.next_label:
+            return torch.nn.BCELoss(reduce=False)
+
+    def y_truth(self, y, next_label) -> torch.Tensor:
+        if self.task is Tasks.next_sensors:
+            return y.to(self.device, non_blocking=True)
+        if self.task is Tasks.next_label:
+            return next_label.unsqueeze(1).to(self.device, non_blocking=True)

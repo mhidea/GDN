@@ -11,16 +11,16 @@ if __name__ == "__main__":
     # Initializing parameters
     param = Params()
     set_param(param)
-    param.task = Tasks.next_sensors
-    param.dataset = Datasets.swat
+    param.task = Tasks.next_label
+    param.dataset = Datasets.dummy
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
-    param.epoch = 30
+    param.epoch = 10
 
     # Creating grid search
-    batches = [128]
+    batches = [10]
     windows = [5]
     embedding_dimensions = [64]
-    topks = [15]
+    topks = [2]
     out_layers = [64]
 
     # batches=[64]
