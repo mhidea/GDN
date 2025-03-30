@@ -4,6 +4,8 @@ import os
 import torch
 import numpy as np
 import random
+import inspect
+import enum
 
 
 class Params:
@@ -242,37 +244,42 @@ class Params:
         self._device = value
 
     def toDict(self) -> dict:
+
+        properties = [
+            name
+            for name, attr in inspect.getmembers(type(self))
+            if isinstance(attr, property)
+        ]
         return {
-            "window_length": self.window_length,
-            "embedding_dimension": self.embedding_dimension,
-            "out_layer_inter_dim": self.out_layer_inter_dim,
-            "out_layer_num": self.out_layer_num,
-            "batch": self.batch,
-            "epoch": self.epoch,
-            "stride": self.stride,
-            "dataset": self.dataset.name,
-            "random_seed": self.random_seed,
-            "val_ratio": self.val_ratio,
-            "learning_rate": self.learning_rate,
-            "decay": self.decay,
-            "topk": self.topk,
-            "model": self.model.value,
-            "task": self.task.name,
-            "device": self.device,
+            a: (
+                getattr(self, a).value
+                if isinstance(getattr(self, a), enum.Enum)
+                else getattr(self, a)
+            )
+            for a in properties
         }
 
-    def summary(self, tablefmt="github"):
+    def summary(self, tablefmt: str = "github", extra_dict: dict = None):
         """
         Creates a summary table of all properties and their values using tabulate.
         Splits tables into chunks of at most five columns.
         """
-        # Gather properties and values into a list
-        d = self.toDict()
+        # Join and return all tables
+        summary_output = f"### {self.best_path()}\n\n"
+        if extra_dict is None:
+            summary_output += f"#### NO EXTRA PARAMETERS.\n\n"
+        else:
+            summary_output += f"#### EXTRA PARAMETERS :\n\n"
+            summary_output += self.__dict_to_table(value=extra_dict, tablefmt=tablefmt)
+        summary_output += f"\n\n#### PARAMETERS :\n\n"
+        summary_output += self.__dict_to_table(value=self.toDict(), tablefmt=tablefmt)
+        return summary_output
 
+    def __dict_to_table(self, value: dict, tablefmt) -> str:
         # Define headers and prepare tables
-        headers = [key for key in d.keys()]
+        headers = [key for key in value.keys()]
         values = [
-            str(d[key]) for key in headers
+            str(value[key]) for key in headers
         ]  # Convert values to strings for display
         tables = []
         # Split into chunks of at most 5 columns
@@ -286,11 +293,7 @@ class Params:
                 stralign="center",
             )
             tables.append(table)
-
-        # Join and return all tables
-        summary_output = ""
-        summary_output += "\n\n".join(tables)
-        return summary_output
+        return "\n\n".join(tables)
 
     def trained(self) -> bool:
         """
@@ -310,7 +313,7 @@ class Params:
 
     def loss_function(self) -> torch.nn.Module:
         if self.task is Tasks.next_sensors:
-            return torch.nn.MSELoss(reduce=False)
+            return torch.nn.L1Loss(reduce=False)
         if self.task is Tasks.next_label:
             return torch.nn.BCELoss(reduce=False)
 

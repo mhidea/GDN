@@ -41,10 +41,10 @@ _test_original = None
 
 class Main:
 
-    def __init__(self, param: Params, debug=False, scale=True):
+    def __init__(self, param: Params, debug=False, scale=True, modelParams={}):
 
         self.param = param
-        self.datestr = None
+        self.modelParams = modelParams
 
         dataset_name = self.param.dataset.value
         print(f"# DATASET \n\n*{self.param.dataset}*")
@@ -93,6 +93,11 @@ class Main:
         self.model: torch.nn.Module = self.param.model.getClass()(
             node_num=len(feature_map),
         ).to(self.param.device)
+        if self.param.trained():
+            print("Model is trained. Loading from file .....")
+            self.model.load_state_dict(
+                torch.load(self.param.best_path(), weights_only=True)
+            )
         # self.model = torch.compile(self.model, mode="reduce-overhead")
 
     def _prepareDF(self, scale, dataset):
@@ -192,10 +197,13 @@ class Main:
 
         # test
         best_model = self.model.to(self.param.device)
-        val_avg_loss, _ = test(best_model, self.val_dataloader)
+        val_avg_loss, val_result = test(best_model, self.val_dataloader)
         test_avg_loss, test_result = test(best_model, self.test_dataloader)
-
-        scores = createMetrics(test_result[0], test_result[2], val_avg_loss)
+        if self.param.task is Tasks.next_sensors:
+            thr = val_result[3].sum(-1).max()
+        else:
+            thr = val_result[0].max()
+        scores = createMetrics(test_result, thr)
         # val_avg_loss, self.val_result = test(best_model, self.val_dataloader)
         # scores = self.get_score(self.test_result, self.val_result)
         if wasnt_trained:
@@ -203,14 +211,18 @@ class Main:
                 pass
                 getWriter().add_hparams(
                     # run_name=f"{param.model.name}_{param.dataset.value}",
-                    hparam_dict=self.param.toDict(),
+                    hparam_dict=self.param.toDict() | {"step": step} | self.modelParams,
                     metric_dict=scores,
                     # global_step=i,
                 )
             with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
                 # Serialize and save the object to the file
                 pickle.dump(self.param, file)
-            getWriter().add_text("summary", self.param.summary(), global_step=step)
+            getWriter().add_text(
+                "summary",
+                self.param.summary(extra_dict=self.modelParams | scores),
+                global_step=step,
+            )
             # clearPAths()
             getWriter().flush()
 

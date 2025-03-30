@@ -74,11 +74,14 @@ def train(
             i -= 1
             y_truth = param.y_truth(y, next_label)
             optimizer.zero_grad(set_to_none=True)
-            out = model(windowed_x.to(param.device, non_blocking=True))
+            out: torch.Tensor = model(windowed_x.to(param.device, non_blocking=True))
             loss = loss_func(out, y_truth)
-            if param.task is Tasks.next_label:
+            if out.dim() == 2:
+                loss = loss.sum(-1)
+                _m = loss.max()
+            else:
                 _m = out.max()
-                threshold = _m if _m > threshold else threshold
+            threshold = _m if _m > threshold else threshold
             loss = loss.sum()
             loss.backward()
             optimizer.step()
@@ -90,11 +93,11 @@ def train(
                 t.set_postfix({"loss": avg_loss})
                 t.close()
         # use val dataset to judge
-        if param.task is Tasks.next_sensors:
-            threshold = avg_loss
+        # if param.task is Tasks.next_sensors:
+        #     threshold = avg_loss
         if val_dataloader is not None:
             val_loss, val_result = test(model, val_dataloader)
-            scores: dict = createMetrics(val_result[0], val_result[2], threshold)
+            scores: dict = createMetrics(val_result, threshold)
             stats_dict = {key: scores[key] for key in filter_keis}
             metrics_dict = {
                 key: scores[key] for key in scores.keys() if key not in filter_keis

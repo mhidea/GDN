@@ -11,65 +11,51 @@ if __name__ == "__main__":
     # Initializing parameters
     param = Params()
     set_param(param)
-    param.task = Tasks.next_sensors
-    param.dataset = Datasets.swat_filtered
-    param.model = Models.gnn_tam_relu
+    param.task = Tasks.next_label
+    param.dataset = Datasets.dummy
+    param.model = Models.gdn
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
-    param.epoch = 1
-
-    # Creating grid search
-    batches = [128]
-    windows = [5]
-    embedding_dimensions = [64]
-    topks = [15]
-    out_layers = [64]
-
-    # batches=[64]
-    # windows=[8]
-    # dims=[32]
-    # topks=[12]
-    # out_layers=[128]
-    grid = itertools.product(batches, windows, embedding_dimensions, topks, out_layers)
     createPaths(param.model, param.dataset)
+    # Creating grid search
+    grid = {
+        "epoch": [2],
+        "batch": [2],
+        "window_length": [5, 6],
+        "embedding_dimension": [64],
+        "topk": [2, 3],
+        "out_layer_inter_dim": [64],
+        "osso": [2, 3],
+    }
+
     createWriter(TensorBoardPath())
+
+    # create a text for list of parameters in the grid
     grid_strig = "# Grid Params"
-    grid_strig += "\n\n- *batches*: " + " , ".join([str(item) for item in batches])
-    grid_strig += "\n\n- *windows*: " + " , ".join([str(item) for item in windows])
-    grid_strig += "\n\n- *embedding_dimensions*: " + " , ".join(
-        [str(item) for item in embedding_dimensions]
-    )
-    grid_strig += "\n\n- *topks*: " + " , ".join([str(item) for item in topks])
-    grid_strig += "\n\n- *out_layers*: " + " , ".join(
-        [str(item) for item in out_layers]
+    grid_strig += "\n\n".join(
+        [
+            f"\n\n- *{key}*: " + " , ".join([str(value) for value in grid[key]])
+            for key in grid.keys()
+        ]
     )
     grid_strig += (
         f"\n\n## TensorBoard Path \n\n```console\n\n{TensorBoardPath()}\n\n```"
     )
     getWriter().add_text(tag="Grid", text_string=grid_strig, global_step=0)
-    for i, (batch, window, embedding_dimension, topk, out_layer) in enumerate(grid):
-        setTag(i)
-        print(
-            i,
-            "batch",
-            batch,
-            "window",
-            window,
-            "embedding_dimension",
-            embedding_dimension,
-            "topk",
-            topk,
-            "out_layer",
-            out_layer,
-        )
-        param.batch = batch
-        param.window_length = window
-        param.embedding_dimension = embedding_dimension
-        param.topk = topk
-        param.out_layer_inter_dim = out_layer
-        param.save_path = getSnapShotPath()
 
-        print(param.summary())
-        main = Main(param, debug=False)
+    _g = [[{key: v} for v in grid[key]] for key in grid.keys()]
+    param_keies = param.toDict().keys()
+    for i, (x) in enumerate(itertools.product(*_g)):
+        setTag(i)
+        param.save_path = getSnapShotPath()
+        model_dict = {}
+        for z in x:
+            key = list(z.keys())[0]
+            if key in param_keies:
+                setattr(param, key, z[key])
+            else:
+                model_dict = model_dict | z
+        print(param.summary(extra_dict=model_dict))
+        main = Main(param, debug=False, modelParams=model_dict)
 
         # main.profile()
         # continue

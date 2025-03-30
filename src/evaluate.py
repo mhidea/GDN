@@ -176,22 +176,18 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
 
 
 def createMetrics(
-    predicted_labels: torch.Tensor,
-    ground_truth_labels: torch.Tensor,
+    test_result,
     threshold=0.5,
 ):
     param = get_param()
     device = param.device
-    if param.task is Tasks.next_sensors:
-        pred = torch.where(
-            predicted_labels.sum(-1) > threshold, torch.tensor(1), torch.tensor(0)
-        )
-        bs = BinaryStatScores().to(device)
-    elif param.task is Tasks.next_label:
-        bs = BinaryStatScores(threshold=float(threshold)).to(device)
-        pred = predicted_labels
-
-    bs.update(pred.to(device), ground_truth_labels.to(device))
+    if test_result[0].dim() == 2:
+        predicted_labels = test_result[3].sum(-1)
+    else:
+        predicted_labels = test_result[0]
+    pred = torch.where(predicted_labels > threshold, torch.tensor(1), torch.tensor(0))
+    bs = BinaryStatScores().to(device)
+    bs.update(pred.to(device), test_result[2].to(device))
     metrics_tensor = bs.compute()
     # Accuracy
     accuracy = (metrics_tensor[0] + metrics_tensor[2]) / metrics_tensor.sum()
@@ -200,21 +196,21 @@ def createMetrics(
     precision = (
         metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[1])
         if (metrics_tensor[0] + metrics_tensor[1]) != 0
-        else 0.0
+        else torch.tensor(0)
     )
 
     # Recall
     recall = (
         metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[3])
         if (metrics_tensor[0] + metrics_tensor[3]) != 0
-        else 0.0
+        else torch.tensor(0)
     )
 
     # F1 Score
     f1_score = (
         2 * (precision * recall) / (precision + recall)
         if (precision + recall) != 0
-        else 0.0
+        else torch.tensor(0)
     )
     metrics = {
         "TP": metrics_tensor[0].item(),
@@ -222,8 +218,8 @@ def createMetrics(
         "TN": metrics_tensor[2].item(),
         "FN": metrics_tensor[3].item(),
         "Accuracy": accuracy.item(),
-        "Precision": precision,
-        "Recall": recall,
-        "F1": f1_score,
+        "Precision": precision.item(),
+        "Recall": recall.item(),
+        "F1": f1_score.item(),
     }
     return metrics

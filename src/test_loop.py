@@ -44,6 +44,7 @@ def test(model, dataloader: DataLoader):
                 y_truth = next_label.to(param.device, non_blocking=True)
                 predicted = predicted.squeeze(-1)
             loss = loss_func(predicted, y_truth)
+            acu_loss += loss.sum().item()
 
             if predicted_tensor is None:
                 predicted_tensor = predicted
@@ -57,7 +58,6 @@ def test(model, dataloader: DataLoader):
                     (ground_labels_tensor, next_label), dim=0
                 )
                 loss_tensor = torch.cat((loss_tensor, loss), dim=0)
-            acu_loss += loss.sum()
 
     t.close()
 
