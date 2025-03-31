@@ -1,42 +1,29 @@
 # -*- coding: utf-8 -*-
-import pandas as pd
-import numpy as np
-import torch
-from torch.utils.data import DataLoader, random_split, Subset
-
-from sklearn.preprocessing import MinMaxScaler
-
-from util.env import *
-from util.preprocess import build_loc_net, construct_data
-from util.net_struct import get_feature_map, get_fully_connected_graph_struc
-from util.consts import Tasks
-from datasets.TimeDataset import TimeDataset
-from sklearn.preprocessing import MinMaxScaler
-
-from models.GDN import GDN
-import pickle
-from train_loop import train
-from test_loop import test
-from evaluate import (
-    get_err_scores,
-    get_best_performance_data,
-    get_val_performance_data,
-    get_full_err_scores,
-    createMetrics,
-)
-
 import os
-
+import pickle
 import random
-from util.preprocess import findSensorActuator
+from typing import Tuple, Dict, Any
 
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.preprocessing import MinMaxScaler
+from torch.utils.data import DataLoader, Subset
 
-from torch.profiler import ProfilerActivity
+# Local Imports
+from datasets.TimeDataset import TimeDataset
+from evaluate import createMetrics
+from test_loop import test
+from train_loop import train
+from util.consts import Tasks
+from util.env import getWriter, getSnapShotPath
+from util.net_struct import get_feature_map
 from util.params import Params
-from torchmetrics.classification import BinaryStatScores
+from util.preprocess import construct_data, findSensorActuator
 
-_train_original = None
-_test_original = None
+# Globals for data caching (consider refactoring later)
+_train_original: pd.DataFrame | None = None
+_test_original: pd.DataFrame | None = None
 
 
 class Main:
@@ -60,9 +47,9 @@ class Main:
 
         self.feature_map = feature_map
 
-        train_dataset_indata = construct_data(train, feature_map, labels=0)
+        train_dataset_indata = construct_data(train, self.feature_map, labels=0)
         test_dataset_indata = construct_data(
-            test, feature_map, labels=test.attack.tolist()
+            test, self.feature_map, labels=test.attack.tolist()
         )
 
         train_dataset = TimeDataset(
@@ -91,7 +78,7 @@ class Main:
         )
 
         self.model: torch.nn.Module = self.param.model.getClass()(
-            node_num=len(feature_map),
+            node_num=len(feature_map), **modelParams
         ).to(self.param.device)
         if self.param.trained():
             print("Model is trained. Loading from file .....")
@@ -140,15 +127,15 @@ class Main:
         )
         # profile(f"Kineto ? {torch.profiler.kineto_available()}")
         if not os.path.exists("./profiler"):
-            os.mkdir("profiler")
+            os.makedirs("./profiler", exist_ok=True)  # Use makedirs with exist_ok=True
         with torch.profiler.profile(
             activities=activities,
             schedule=torch.profiler.schedule(wait=1, warmup=4, active=3, repeat=1),
             on_trace_ready=torch.profiler.tensorboard_trace_handler("./profiler"),
             record_shapes=True,
-            profile_memory=True,
-            with_stack=True,
-            use_cuda=True,
+            profile_memory=True,  # Note: profile_memory adds overhead
+            with_stack=True,  # Note: with_stack adds overhead
+            use_cuda=(self.param.device == "cuda"),  # Set use_cuda based on device
         ) as prof:
             for step, batch_data in enumerate(self.train_dataloader):
                 x, labels, attack_labels, edge_index = batch_data
@@ -195,17 +182,32 @@ class Main:
                 torch.load(self.param.best_path(), weights_only=True)
             )
 
-        # test
+        # Test the best model
         best_model = self.model.to(self.param.device)
-        val_avg_loss, val_result = test(best_model, self.val_dataloader)
-        test_avg_loss, test_result = test(best_model, self.test_dataloader)
+        _, val_result = test(best_model, self.val_dataloader)
+        _, test_result = test(best_model, self.test_dataloader)
+
+        # Determine threshold based on validation results
+        # Assuming val_result structure: [predictions, labels, attack_labels, optional_other_data]
+        # Assuming test_result structure: [predictions, labels, attack_labels, optional_other_data]
         if self.param.task is Tasks.next_sensors:
-            thr = val_result[3].sum(-1).max()
+            # Assuming the 4th element (index 3) contains relevant scores for thresholding in this task
+            if len(val_result) > 3 and val_result[3] is not None:
+                thr = val_result[3].sum(-1).max()  # Example threshold logic
+            else:
+                # Fallback or error if expected data isn't present
+                print(
+                    "Warning: Expected validation data for thresholding not found for next_sensors task. Using default."
+                )
+                # Example fallback: use prediction max
+                thr = val_result[0].max()  # Adjust fallback as needed
         else:
+            # Default threshold logic based on predictions (index 0)
             thr = val_result[0].max()
+
         scores = createMetrics(test_result, thr)
-        # val_avg_loss, self.val_result = test(best_model, self.val_dataloader)
-        # scores = self.get_score(self.test_result, self.val_result)
+
+        # Log results if the model was trained in this run
         if wasnt_trained:
             if isinstance(scores, dict):
                 pass
@@ -218,6 +220,9 @@ class Main:
             with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
                 # Serialize and save the object to the file
                 pickle.dump(self.param, file)
+            with open(f"{getSnapShotPath()}/model_parameters.pickle", "wb") as file:
+                # Serialize and save the object to the file
+                pickle.dump(self.modelParams, file)
             getWriter().add_text(
                 "summary",
                 self.param.summary(extra_dict=self.modelParams | scores),

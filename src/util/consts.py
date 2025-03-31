@@ -21,6 +21,7 @@ class Tasks(Enum):
 class Models(Enum):
     gdn = "models.GDN.GDN"
     gnn_tam_relu = "models.gnn_tam.GNN_TAM_RELU"
+    gnn_tam = "models.gnn_tam.GNN_TAM"
 
     def getClass(self):
 

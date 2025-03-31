@@ -110,6 +110,9 @@ class GNN_TAM(BaseModel):
     def get_adj(self):
         return self.adj
 
+    def getParmeters():
+        return {"n_gnn": 1, "gsl_type": "relu", "alpha": 0.1}
+
 
 class GNN_TAM_RELU(GNN_TAM):
     def __init__(self, **kwargs):

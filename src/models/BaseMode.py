@@ -19,6 +19,9 @@ class BaseModel(torch.nn.Module):
             return torch.randn([data.shape[0], self.node_num])
         return torch.randn(self.node_num)
 
+    def getParmeters() -> dict:
+        return {}
+
     def forward(self, data):
         out = self.pre_forward(data)
         # Out shape is (batch,nodes=sensors,windows)

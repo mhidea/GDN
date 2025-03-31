@@ -12,28 +12,44 @@ if __name__ == "__main__":
     param = Params()
     set_param(param)
     param.task = Tasks.next_label
-    param.dataset = Datasets.dummy
+    param.dataset = Datasets.swat
     param.model = Models.gdn
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     createPaths(param.model, param.dataset)
+
+    model_parameters = param.model.getClass().getParmeters()
+    model_parameters = {key: [model_parameters[key]] for key in model_parameters.keys()}
+    print(model_parameters)
+    if param.model == Models.gdn:
+        model_parameters = {
+            "n_gnn": [1, 2],
+            "gsl_type": ["relu", "directed"],
+            "alpha": [0.1],
+        }
     # Creating grid search
+    # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [2],
-        "batch": [2],
-        "window_length": [5, 6],
+        "epoch": [40],
+        "batch": [256],
+        "window_length": [10],
         "embedding_dimension": [64],
-        "topk": [2, 3],
+        "topk": [14, 15, 16],
         "out_layer_inter_dim": [64],
-        "osso": [2, 3],
+        "out_layer_num": [1, 2],
     }
-
+    grid = grid | model_parameters
     createWriter(TensorBoardPath())
-
+    _g = []
+    total = 0
+    for key in grid.keys():
+        temp = [{key: v} for v in grid[key]]
+        total += len(temp)
+        _g.append(temp)
     # create a text for list of parameters in the grid
-    grid_strig = "# Grid Params"
+    grid_strig = f"# Grid Params\n\n**Total runs: {total}**"
     grid_strig += "\n\n".join(
         [
-            f"\n\n- *{key}*: " + " , ".join([str(value) for value in grid[key]])
+            f"\n\n- **{key}**: " + " , ".join([str(value) for value in grid[key]])
             for key in grid.keys()
         ]
     )
@@ -42,7 +58,6 @@ if __name__ == "__main__":
     )
     getWriter().add_text(tag="Grid", text_string=grid_strig, global_step=0)
 
-    _g = [[{key: v} for v in grid[key]] for key in grid.keys()]
     param_keies = param.toDict().keys()
     for i, (x) in enumerate(itertools.product(*_g)):
         setTag(i)
@@ -56,7 +71,7 @@ if __name__ == "__main__":
                 model_dict = model_dict | z
         print(param.summary(extra_dict=model_dict))
         main = Main(param, debug=False, modelParams=model_dict)
-
+        # main.model = torch.compile(main.model)
         # main.profile()
         # continue
 

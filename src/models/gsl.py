@@ -114,17 +114,13 @@ class GSL(nn.Module):
         if gsl_type == "relu":
             self.gsl_layer = Graph_ReLu_W(n_nodes, k, device)
         elif gsl_type == "directed":
-            self.self.gsl_layer = Graph_Directed_A(
-                n_nodes, window_size, alpha, k, device
-            )
+            self.gsl_layer = Graph_Directed_A(n_nodes, window_size, alpha, k, device)
         elif gsl_type == "unidirected":
-            self.self.gsl_layer = Graph_Uni_Directed_A(
+            self.gsl_layer = Graph_Uni_Directed_A(
                 n_nodes, window_size, alpha, k, device
             )
         elif gsl_type == "undirected":
-            self.self.gsl_layer = Graph_Undirected_A(
-                n_nodes, window_size, alpha, k, device
-            )
+            self.gsl_layer = Graph_Undirected_A(n_nodes, window_size, alpha, k, device)
         else:
             print("Wrong name of graph structure learning layer!")
 
