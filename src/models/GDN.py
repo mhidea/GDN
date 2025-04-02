@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.BaseMode import BaseModel
+from models.BaseModel import BaseModel
 from util.env import *
 from util.time import *
 

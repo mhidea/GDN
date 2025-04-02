@@ -159,3 +159,9 @@ def fully_conneted_adj(node_num):
                 edge_indexes[0].append(i)
                 edge_indexes[1].append(j)
     return torch.tensor(edge_indexes, dtype=torch.long)
+
+
+def fully_connected_nonSparse(node_num):
+    adj_0 = torch.rand(node_num, node_num).round().long()
+    identity = torch.eye(node_num)
+    return adj_0 + identity

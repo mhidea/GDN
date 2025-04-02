@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from models.gsl import GSL
-from models.BaseMode import BaseModel
+from models.BaseModel import BaseModel
 from util.env import *
 from util.time import *
 
