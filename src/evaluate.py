@@ -181,7 +181,7 @@ def createMetrics(
 ):
     param = get_param()
     device = param.device
-    if test_result[0].dim() == 2:
+    if param.task is Tasks.next_sensors:
         predicted_labels = test_result[3].sum(-1)
     else:
         predicted_labels = test_result[0]

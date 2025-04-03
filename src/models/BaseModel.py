@@ -24,7 +24,7 @@ class BaseModel(torch.nn.Module):
 
     def forward(self, data):
         out = self.pre_forward(data)
-        assert out.shape[-1] == self.node_num
+        assert out.shape[-2] == self.node_num
         # Out shape is (batch,nodes=sensors,windows)
 
         if self.task == Tasks.next_sensors:

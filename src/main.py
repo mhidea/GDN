@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader, Subset
 
 # Local Imports
 from datasets.TimeDataset import TimeDataset
+from datasets.CurrentDataset import CurrentDataset
 from evaluate import createMetrics
 from test_loop import test
 from train_loop import train
@@ -19,7 +20,7 @@ from util.consts import Tasks
 from util.env import getWriter, getSnapShotPath
 from util.net_struct import get_feature_map
 from util.params import Params
-from util.preprocess import construct_data, findSensorActuator
+from util.preprocess import findSensorActuator
 
 # Globals for data caching (consider refactoring later)
 _train_original: pd.DataFrame | None = None
@@ -35,33 +36,51 @@ class Main:
 
         dataset_name = self.param.dataset.value
         print(f"# DATASET \n\n*{self.param.dataset}*")
-        train, test = self._prepareDF(scale, dataset=dataset_name)
+        train, test, (sensors, actuators, consts) = self._prepareDF(
+            scale, dataset=dataset_name
+        )
 
-        feature_map = get_feature_map(dataset_name)
-        # fc_struc = get_fully_connected_graph_struc(dataset_name)
+        # feature_map = get_feature_map(dataset_name)
+        # # fc_struc = get_fully_connected_graph_struc(dataset_name)
 
-        # fc_edge_index = build_loc_net(
-        #     fc_struc, list(train.columns), feature_map=feature_map
+        # # fc_edge_index = build_loc_net(
+        # #     fc_struc, list(train.columns), feature_map=feature_map
+        # # )
+        # # fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.long)
+
+        # self.feature_map = feature_map
+
+        # train_dataset_indata = construct_data(train, self.feature_map, labels=0)
+        # test_dataset_indata = construct_data(
+        #     test, self.feature_map, labels=test.attack.tolist()
         # )
-        # fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.long)
 
-        self.feature_map = feature_map
-
-        train_dataset_indata = construct_data(train, self.feature_map, labels=0)
-        test_dataset_indata = construct_data(
-            test, self.feature_map, labels=test.attack.tolist()
-        )
-
-        train_dataset = TimeDataset(
-            train_dataset_indata,
-            mode="train",
-            param=self.param,
-        )
-        test_dataset = TimeDataset(
-            test_dataset_indata,
-            mode="test",
-            param=self.param,
-        )
+        if self.param.task in [Tasks.next_label, Tasks.next_sensors]:
+            train_dataset = TimeDataset(
+                train,
+                sensor_list=sensors,
+                actuator_list=actuators,
+                mode="train",
+            )
+            test_dataset = TimeDataset(
+                test,
+                sensor_list=sensors,
+                actuator_list=actuators,
+                mode="test",
+            )
+        elif self.param.task in [Tasks.current_label, Tasks.current_actuators]:
+            train_dataset = CurrentDataset(
+                train,
+                sensor_list=sensors,
+                actuator_list=actuators,
+                mode="train",
+            )
+            test_dataset = CurrentDataset(
+                test,
+                sensor_list=sensors,
+                actuator_list=actuators,
+                mode="test",
+            )
 
         train_dataloader, val_dataloader = self.get_loaders(train_dataset)
 
@@ -78,7 +97,7 @@ class Main:
         )
 
         self.model: torch.nn.Module = self.param.model.getClass()(
-            node_num=len(feature_map), **modelParams
+            node_num=len(sensors), **modelParams
         ).to(self.param.device)
         if self.param.trained():
             print("Model is trained. Loading from file .....")
@@ -97,7 +116,13 @@ class Main:
             _test_original = pd.read_csv(
                 f"./data/{dataset}/test.csv", sep=",", index_col=0
             )
-            sensors, _, _ = findSensorActuator(_train_original)
+            sensors, actuators, consts = findSensorActuator(_train_original)
+            print("#####################################")
+            print("sensors count: ", len(sensors))
+            print("actuators count: ", len(actuators))
+            print("consts count: ", len(consts))
+            print("consts: ", consts)
+            print("#####################################")
             print(sensors)
             if scale:
                 # Initialize the MinMaxScaler
@@ -110,9 +135,9 @@ class Main:
                 _train_original[sensors] = scaler.transform(_train_original[sensors])
 
                 _test_original[sensors] = scaler.transform(_test_original[sensors])
-            if "attack" in _train_original.columns:
-                _train_original = _train_original.drop(columns=["attack"])
-        return _train_original, _test_original
+            # if "attack" in _train_original.columns:
+            #     _train_original = _train_original.drop(columns=["attack"])
+        return _train_original, _test_original, (sensors, actuators, consts)
 
     def profile(self):
         print(f"Profiling the device {self.param.device}")
@@ -170,7 +195,6 @@ class Main:
                 model=self.model,
                 train_dataloader=self.train_dataloader,
                 val_dataloader=self.val_dataloader,
-                feature_map=self.feature_map,
                 test_dataloader=self.test_dataloader,
                 test_dataset=self.test_dataset,
                 train_dataset=self.train_dataset,
@@ -265,29 +289,30 @@ class Main:
         return train_dataloader, val_dataloader
 
     def get_score(self, test_result, val_result):
-        feature_num = len(test_result[0][0])
-        np_test_result = np.array(test_result)
-        np_val_result = np.array(val_result)
+        pass
+        # feature_num = len(test_result[0][0])
+        # np_test_result = np.array(test_result)
+        # np_val_result = np.array(val_result)
 
-        test_labels = np_test_result[2, :, 0].tolist()
+        # test_labels = np_test_result[2, :, 0].tolist()
 
-        test_scores, normal_scores = get_full_err_scores(test_result, val_result)
+        # test_scores, normal_scores = get_full_err_scores(test_result, val_result)
 
-        top1_best_info = get_best_performance_data(test_scores, test_labels, topk=1)
-        top1_val_info = get_val_performance_data(
-            test_scores, normal_scores, test_labels, topk=1
-        )
+        # top1_best_info = get_best_performance_data(test_scores, test_labels, topk=1)
+        # top1_val_info = get_val_performance_data(
+        #     test_scores, normal_scores, test_labels, topk=1
+        # )
 
-        print("=========================** Result **============================\n")
+        # print("=========================** Result **============================\n")
 
-        info = None
-        # if self.env_config["report"] == "best":
-        if True:
-            info = top1_best_info
-        elif self.env_config["report"] == "val":
-            info = top1_val_info
-        return {
-            "F1": info[0],
-            "precision": info[1],
-            "recall": info[2],
-        }
+        # info = None
+        # # if self.env_config["report"] == "best":
+        # if True:
+        #     info = top1_best_info
+        # elif self.env_config["report"] == "val":
+        #     info = top1_val_info
+        # return {
+        #     "F1": info[0],
+        #     "precision": info[1],
+        #     "recall": info[2],
+        # }

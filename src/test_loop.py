@@ -37,12 +37,8 @@ def test(model, dataloader: DataLoader):
     for windowed_x, y, next_label in t:
 
         with torch.no_grad():
-            predicted = model(windowed_x.to(device, non_blocking=True))
-            if param.task is Tasks.next_sensors:
-                y_truth = y.to(param.device, non_blocking=True)
-            elif param.task is Tasks.next_label:
-                y_truth = next_label.to(param.device, non_blocking=True)
-                predicted = predicted.squeeze(-1)
+            predicted = model(windowed_x)
+            y_truth = param.y_truth(y, next_label)
             loss = loss_func(predicted, y_truth)
             acu_loss += loss.sum().item()
 

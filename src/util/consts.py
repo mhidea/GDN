@@ -15,7 +15,8 @@ class Datasets(Enum):
 class Tasks(Enum):
     next_label = 1
     next_sensors = 2
-    current_labels = 3
+    current_label = 3
+    current_actuators = 4
 
 
 class Models(Enum):

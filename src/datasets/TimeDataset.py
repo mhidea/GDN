@@ -6,63 +6,49 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 from util.consts import Tasks
 from util.params import Params
+import pandas as pd
+from util.env import get_param
 
 
 class TimeDataset(Dataset):
-    def __init__(self, raw_data, param: Params, mode="train"):
-        self.raw_data = raw_data
-        self.param = param
-        self.mode = mode
-
-        x_data = raw_data[:-1]
-        labels = raw_data[-1]
-
-        data = x_data
-
-        # to tensor
-        data = torch.tensor(data).float()
-        labels = torch.tensor(labels).float()
-
-        self.x, self.y, self.labels = self.process(data, labels)
+    def __init__(
+        self,
+        data_frame: pd.DataFrame,
+        sensor_list: list,
+        actuator_list: list,
+        mode="train",
+    ):
+        self.df_sensor = torch.tensor(
+            data_frame[sensor_list].to_numpy(), dtype=torch.float32
+        ).contiguous()
+        # self.df_actuator = torch.tensor(
+        #     data_frame[actuator_list].to_numpy(), dtype=torch.float32
+        # )
+        if mode == "train" and "attack" not in data_frame.columns:
+            self.label = torch.zeros(self.df_sensor.shape[0]).float()
+        else:
+            self.label = torch.tensor(
+                data_frame["attack"].to_numpy(), dtype=torch.float32
+            )
+        self.label = self.label.reshape(-1, 1).contiguous()
+        self.device = get_param().device
+        self.window_length = get_param().window_length
+        self.stride = get_param().stride
 
     def __len__(self):
-        return len(self.x)
-
-    def process(self, data, labels):
-        x_arr, y_arr = [], []
-        labels_arr = []
-
-        is_train = self.mode == "train"
-
-        node_num, total_time_len = data.shape
-
-        rang = (
-            range(self.param.window_length, total_time_len, self.param.stride)
-            if is_train
-            else range(self.param.window_length, total_time_len)
-        )
-
-        for i in rang:
-
-            ft = data[:, i - self.param.window_length : i]
-            x_arr.append(ft)
-            tar = data[:, i]
-            y_arr.append(tar)
-
-            labels_arr.append(labels[i])
-
-        x = torch.stack(x_arr).contiguous()
-        y = torch.stack(y_arr).contiguous()
-
-        labels = torch.Tensor(labels_arr).contiguous()
-
-        return x, y, labels
+        return self.df_sensor.shape[0] - self.window_length - 1
 
     def __getitem__(self, idx):
 
-        windowed_sensors = self.x[idx]
-        netx_seonsors = self.y[idx]
-
-        next_label = self.labels[idx]
-
-        return (windowed_sensors, netx_seonsors, next_label)
+        return (
+            self.df_sensor[idx : idx + self.window_length, :]
+            .mT.to(self.device, non_blocking=True)
+            .contiguous(),
+            self.df_sensor[idx + self.window_length]
+            .unsqueeze(-1)
+            .to(self.device, non_blocking=True)
+            .contiguous(),
+            self.label[idx + self.window_length, :]
+            # .unsqueeze()
+            .to(self.device, non_blocking=True),
+        )

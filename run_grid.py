@@ -10,16 +10,18 @@ if __name__ == "__main__":
 
     # Initializing parameters
     param = Params()
+    param.device = "cuda" if torch.cuda.is_available() else "cpu"
     set_param(param)
+
     param.task = Tasks.next_label
     param.dataset = Datasets.batadal
-    param.model = Models.diffpool
-    param.device = "cuda" if torch.cuda.is_available() else "cpu"
+    param.model = Models.gdn
     createPaths(param.model, param.dataset)
 
     model_parameters = param.model.getClass().getParmeters()
     model_parameters = {key: [model_parameters[key]] for key in model_parameters.keys()}
     print(model_parameters)
+
     if param.model == Models.gnn_tam:
         model_parameters = {
             "n_gnn": [1],
@@ -30,14 +32,15 @@ if __name__ == "__main__":
         model_parameters = {"sparsification_method": ["topk", "dropout"]}
     elif param.model == Models.diffpool:
         model_parameter = {"max_nodes": [150]}
+
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [20],
+        "epoch": [10],
         "batch": [64],
-        "window_length": [10],
+        "window_length": [5, 8, 15],
         "embedding_dimension": [64],
-        "topk": [20],
+        "topk": [5, 8, 15],
         "out_layer_inter_dim": [64],
         "out_layer_num": [1],
     }

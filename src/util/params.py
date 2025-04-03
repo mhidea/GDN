@@ -319,6 +319,6 @@ class Params:
 
     def y_truth(self, y, next_label) -> torch.Tensor:
         if self.task is Tasks.next_sensors:
-            return y.to(self.device, non_blocking=True)
+            return y
         if self.task is Tasks.next_label:
-            return next_label.unsqueeze(1).to(self.device, non_blocking=True)
+            return next_label

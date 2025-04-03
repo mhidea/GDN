@@ -29,7 +29,6 @@ def train(
     model=None,
     train_dataloader=None,
     val_dataloader=None,
-    feature_map={},
     test_dataloader=None,
     test_dataset=None,
     dataset_name="swat",
@@ -74,7 +73,7 @@ def train(
             i -= 1
             y_truth = param.y_truth(y, next_label)
             optimizer.zero_grad(set_to_none=True)
-            out: torch.Tensor = model(windowed_x.to(param.device, non_blocking=True))
+            out: torch.Tensor = model(windowed_x)
             loss = loss_func(out, y_truth)
             if out.dim() == 2:
                 loss = loss.sum(-1)

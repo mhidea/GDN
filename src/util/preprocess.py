@@ -64,23 +64,23 @@ def build_net(target, all_features):
     return edge_indexes, index_feature_map
 
 
-def construct_data(data, feature_map, labels=0):
-    res = []
+# def construct_data(data, feature_map, labels=0):
+#     res = []
 
-    for feature in feature_map:
-        if feature in data.columns:
-            res.append(data.loc[:, feature].values.tolist())
-        else:
-            print(feature, "not exist in data")
-    # append labels as last
-    sample_n = len(res[0])
+#     for feature in feature_map:
+#         if feature in data.columns:
+#             res.append(data.loc[:, feature].values.tolist())
+#         else:
+#             print(feature, "not exist in data")
+#     # append labels as last
+#     sample_n = len(res[0])
 
-    if type(labels) == int:
-        res.append([labels] * sample_n)
-    elif len(labels) == sample_n:
-        res.append(labels)
+#     if type(labels) == int:
+#         res.append([labels] * sample_n)
+#     elif len(labels) == sample_n:
+#         res.append(labels)
 
-    return res
+#     return res
 
 
 def build_loc_net(struc: dict, all_features: list, feature_map=[]) -> list:
@@ -141,13 +141,6 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
             consts[col] = dataFrame.iloc[0][col]
         else:
             sensors.append(col)
-    print("#####################################")
-    print("sensors count: ", len(sensors))
-    print("actuators count: ", len(actuators))
-    print("consts count: ", len(consts))
-    print("consts: ", consts)
-    print("#####################################")
-
     return sensors, actuators, consts
 
 
