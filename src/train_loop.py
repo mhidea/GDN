@@ -54,7 +54,7 @@ def train(
     dataloader = train_dataloader
 
     acu_loss = 0
-    loss_func = param.loss_function()
+    loss_func = torch.nn.MSELoss(reduce=False)  # param.loss_function()
 
     for i_epoch in range(epoch):
 

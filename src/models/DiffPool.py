@@ -10,8 +10,6 @@ from torch_geometric.nn import DenseGCNConv as GCNConv, dense_diff_pool
 from models.BaseModel import BaseModel
 from util.preprocess import fully_connected_nonSparse
 
-max_nodes = 150
-
 
 class GNN(torch.nn.Module):
     def __init__(
@@ -47,12 +45,19 @@ class GNN(torch.nn.Module):
 
 
 class DiffPool(BaseModel):
+    """_summary_
+
+    Args:
+        BaseModel (_type_): _description_
+    """
+
     def __init__(self, **kwargs):
         super(DiffPool, self).__init__(**kwargs)
         self.adj = fully_connected_nonSparse(self.node_num).to(
             self.param.device, non_blocking=True
         )
-        num_nodes = ceil(0.25 * max_nodes)
+        self.max_nodes = kwargs["max_nodes"]
+        num_nodes = ceil(0.25 * self.max_nodes)
         self.gnn1_pool = GNN(
             self.param.window_length, self.param.out_layer_inter_dim, num_nodes
         )
@@ -104,3 +109,6 @@ class DiffPool(BaseModel):
         x = F.relu(self.lin1(x))
         x = self.lin2(x)
         return F.log_softmax(x, dim=-1)  # , l1 + l2, e1 + e2
+
+    def getParmeters() -> dict:
+        return {"max_nodes": 150}
