@@ -25,6 +25,7 @@ from util.preprocess import findSensorActuator
 # Globals for data caching (consider refactoring later)
 _train_original: pd.DataFrame | None = None
 _test_original: pd.DataFrame | None = None
+_columns = None
 
 
 class Main:
@@ -109,6 +110,7 @@ class Main:
     def _prepareDF(self, scale, dataset):
         global _train_original
         global _test_original
+        global _columns
         if _train_original is None:
             _train_original = pd.read_csv(
                 f"./data/{dataset}/train.csv", sep=",", index_col=0
@@ -116,7 +118,8 @@ class Main:
             _test_original = pd.read_csv(
                 f"./data/{dataset}/test.csv", sep=",", index_col=0
             )
-            sensors, actuators, consts = findSensorActuator(_train_original)
+            _columns = findSensorActuator(_train_original)
+            sensors, actuators, consts = _columns
             print("#####################################")
             print("sensors count: ", len(sensors))
             print("actuators count: ", len(actuators))
@@ -137,7 +140,7 @@ class Main:
                 _test_original[sensors] = scaler.transform(_test_original[sensors])
             # if "attack" in _train_original.columns:
             #     _train_original = _train_original.drop(columns=["attack"])
-        return _train_original, _test_original, (sensors, actuators, consts)
+        return _train_original, _test_original, _columns
 
     def profile(self):
         print(f"Profiling the device {self.param.device}")
