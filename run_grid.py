@@ -12,7 +12,7 @@ if __name__ == "__main__":
     param = Params()
     set_param(param)
     param.task = Tasks.next_label
-    param.dataset = Datasets.swat
+    param.dataset = Datasets.batadal
     param.model = Models.diffpool
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     createPaths(param.model, param.dataset)
@@ -33,12 +33,12 @@ if __name__ == "__main__":
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [10],
+        "epoch": [20],
         "batch": [64],
         "window_length": [10],
         "embedding_dimension": [64],
         "topk": [20],
-        "out_layer_inter_dim": [128, 256],
+        "out_layer_inter_dim": [64],
         "out_layer_num": [1],
     }
     grid = grid | model_parameters

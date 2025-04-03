@@ -26,6 +26,7 @@ class Models(Enum):
     my_fw = "models.MyModels.FeatureWindowGNN"
     my_gnn_lstm = "models.MyModels.GNN_LSTM_AnomalyDetector_Optimized"
     diffpool = "models.DiffPool.DiffPool"
+    diffpool_lstm = "models.DiffPool.DiffPoolLstm"
 
     def getClass(self):
 
