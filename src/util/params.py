@@ -28,6 +28,8 @@ class Params:
         model: Models = Models.gdn,
         task: Tasks = Tasks.next_label,
         device: str = "cuda",
+        lstm_hidden_dim=64,
+        lstm_layers_num=1,
     ):
         self._batch = batch
         self._epoch = epoch
@@ -46,6 +48,30 @@ class Params:
         self._model = model
         self._task = task
         self._device = device
+        self._lstm_hidden_dim = lstm_hidden_dim
+        self._lstm_layers_num = lstm_layers_num
+
+    @property
+    def lstm_hidden_dim(self) -> int:
+        """
+        Gets or sets the _lstm_hidden_dim size.
+        """
+        return self._lstm_hidden_dim
+
+    @lstm_hidden_dim.setter
+    def lstm_hidden_dim(self, value: int):
+        self._lstm_hidden_dim = value
+
+    @property
+    def lstm_layers_num(self) -> int:
+        """
+        Gets or sets the _lstm_layers_num size.
+        """
+        return self._lstm_layers_num
+
+    @lstm_layers_num.setter
+    def lstm_layers_num(self, value: int):
+        self._lstm_layers_num = value
 
     @property
     def batch(self) -> int:
@@ -313,12 +339,12 @@ class Params:
 
     def loss_function(self) -> torch.nn.Module:
         if self.task is Tasks.next_sensors:
-            return torch.nn.L1Loss(reduce=False)
+            return torch.nn.L1Loss(reduction="none")
         if self.task is Tasks.next_label:
-            return torch.nn.BCELoss(reduce=False)
+            return torch.nn.BCELoss(reduction="none")
 
-    def y_truth(self, y, next_label) -> torch.Tensor:
-        if self.task is Tasks.next_sensors:
+    def y_truth(self, y, label) -> torch.Tensor:
+        if self.task in [Tasks.next_sensors, Tasks.current_actuators]:
             return y
-        if self.task is Tasks.next_label:
-            return next_label
+        if self.task in [Tasks.next_label, Tasks.current_label]:
+            return label

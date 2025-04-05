@@ -10,6 +10,7 @@ from util.time import *
 
 from .graph_layer import GraphLayer
 from util.preprocess import fully_conneted_adj
+from models.Lstm import LstmStart
 
 
 def get_batch_edge_index(org_edge_index, batch_num, node_num):
@@ -210,3 +211,16 @@ class GDN(BaseModel):
         out = self.dp(out)
         out = self.out_layer(out)
         return out
+
+
+class GDNLstmStart(BaseModel):
+    """docstring for GDNLstmStart."""
+
+    def __init__(self, **kwargs):
+        super(GDNLstmStart, self).__init__(**kwargs)
+        self.gdn = GDN(**kwargs)
+        self.lstm = LstmStart(self.gdn.node_num)
+
+    def forward(self, x):
+        x = self.lstm(x)
+        return self.gdn(x)

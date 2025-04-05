@@ -1,9 +1,21 @@
 {
-    "python.envFile": "${workspaceFolder}/.env",
+    // "python.envFile": "${workspaceFolder}/.env",
     "python.autoComplete.extraPaths": [
         "${workspaceFolder}/src"
     ],
     "python.languageServer": "Pylance", //or "Pylance"
+    "python.analysis.aiCodeActions": {
+        "implementAbstractClasses": true
+    },
+    // "python.analysis.autoFormatStrings": true,
+    // "python.analysis.autoImportCompletions": true,
+    // "python.analysis.inlayHints.callArgumentNames": "all",
+    // "python.analysis.inlayHints.functionReturnTypes": true,
+    // "python.analysis.inlayHints.variableTypes": true,
+    "python.analysis.logLevel": "Error",
+    "python.analysis.extraPaths": [
+        "./src"
+    ],
     "actionButtons": {
         "defaultColor": "#38bb38", // Can also use string color names.
         "loadNpmCommands": false, // Disables automatic generation of actions for npm commands.

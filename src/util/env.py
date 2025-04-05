@@ -40,9 +40,9 @@ def get_param() -> Params:
     return _param
 
 
-def set_param(dev: Params):
+def set_param(param: Params):
     global _param
-    _param = dev
+    _param = param
 
 
 def init_work(worker_id, seed):

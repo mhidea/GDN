@@ -11,6 +11,7 @@ from models.BaseModel import BaseModel
 from util.preprocess import fully_connected_nonSparse
 from torch_geometric.nn.aggr import LSTMAggregation
 from torch.nn import LSTM
+from models.Lstm import LstmStart
 
 
 class GNN(torch.nn.Module):
@@ -121,7 +122,7 @@ class DiffPool(BaseModel):
         return {"max_nodes": 150}
 
 
-class DiffPoolLstm(BaseModel):
+class DiffPoolLstmStart(BaseModel):
     """_summary_
 
     Args:
@@ -129,16 +130,13 @@ class DiffPoolLstm(BaseModel):
     """
 
     def __init__(self, **kwargs):
-        super(DiffPoolLstm, self).__init__(**kwargs)
+        super(DiffPoolLstmStart, self).__init__(**kwargs)
         self.adj = fully_connected_nonSparse(self.node_num).to(
             self.param.device, non_blocking=True
         )
         self.max_nodes = kwargs["max_nodes"]
 
-        self.lstm = LSTM(
-            self.node_num,
-            self.node_num,
-        )
+        self.lstm = LstmStart(self.node_num)
 
         num_nodes = ceil(0.25 * self.max_nodes)
         self.gnn1_pool = GNN(1, self.param.out_layer_inter_dim, num_nodes)
@@ -173,9 +171,7 @@ class DiffPoolLstm(BaseModel):
 
     def pre_forward(self, x: torch.Tensor, mask=None):
         b, v, w = x.shape
-        x = x.transpose(-1, -2)
-        x, _ = self.lstm(x)
-        x = x[:, -1, :].unsqueeze(-1)
+        x = self.lstm(x)
         s = self.gnn1_pool(x, self.adj, mask)
         x = self.gnn1_embed(x, self.adj, mask)
 

@@ -1,4 +1,5 @@
 import numpy as np
+from sympy import false
 import torch
 import matplotlib.pyplot as plt
 import torch.nn as nn
@@ -7,7 +8,7 @@ import torch.utils
 from test_loop import *
 import torch.nn.functional as F
 import numpy as np
-from evaluate import createMetrics
+from evaluate import createMetrics, createStats
 from torch.utils.data import DataLoader, random_split, Subset
 from scipy.stats import iqr
 import os
@@ -15,7 +16,7 @@ import tqdm
 from util.time import *
 from util.env import *
 from util.consts import Tasks
-
+from models.BaseModel import BaseModel
 
 # def loss_func(y_pred, y_true):
 #     loss = F.mse_loss(y_pred, y_true, reduction="sum")
@@ -26,7 +27,7 @@ filter_keis = ["TP", "FP", "TN", "FN"]
 
 
 def train(
-    model=None,
+    model: BaseModel = None,
     train_dataloader=None,
     val_dataloader=None,
     test_dataloader=None,
@@ -53,7 +54,7 @@ def train(
     dataloader = train_dataloader
 
     acu_loss = 0
-    loss_func = torch.nn.MSELoss(reduce=False)  # param.loss_function()
+    loss_func = torch.nn.L1Loss(reduction="none")  # param.loss_function()
 
     for i_epoch in range(epoch):
 
@@ -69,12 +70,19 @@ def train(
         total_samples = dataloader.dataset.__len__()
         avg_loss = 0
         threshold = 0
-        for windowed_x, y, next_label in t:
+        all_losses = torch.zeros(
+            total_samples, model.node_num, device=param.device, requires_grad=False
+        )
+        for b, (windowed_x, y, next_label) in enumerate(t):
             i -= 1
             y_truth = param.y_truth(y, next_label)
             optimizer.zero_grad(set_to_none=True)
             out: torch.Tensor = model(windowed_x)
-            loss = loss_func(out, y_truth)
+            loss: torch.Tensor = loss_func(out, y_truth)
+            all_losses[b * param.batch : b * param.batch + windowed_x.shape[0], :] = (
+                loss.detach().clone().squeeze(-1)
+            )
+
             if out.dim() == 2:
                 loss = loss.sum(-1)
                 _m = loss.max()
@@ -94,9 +102,12 @@ def train(
         # use val dataset to judge
         # if param.task is Tasks.next_sensors:
         #     threshold = avg_loss
+
+        stats = createStats(all_losses=all_losses)
+
         if val_dataloader is not None:
-            val_loss, val_result = test(model, val_dataloader)
-            scores: dict = createMetrics(val_result, threshold)
+            scores: dict = test(model, val_dataloader, stats=stats)
+            val_loss = scores["Loss"]
             stats_dict = {key: scores[key] for key in filter_keis}
             metrics_dict = {
                 key: scores[key] for key in scores.keys() if key not in filter_keis

@@ -64,22 +64,23 @@ class CurrentDataset(Dataset):
             )
         self.label = self.label.reshape(-1, 1).contiguous()
         self.device = get_param().device
+        self.stride = get_param().stride
 
     def __len__(self):
-        return self.df_sensor.shape[0]
+        return self.df_sensor.shape[0] // self.stride
 
     def __getitem__(self, idx):
-
+        start = idx * self.stride
         return (
-            self.df_sensor[idx]
+            self.df_sensor[start]
+            .reshape(-1, 1)
+            .to(self.device, non_blocking=True)
+            .contiguous(),
+            self.df_actuator[start]
             .unsqueeze(-1)
             .to(self.device, non_blocking=True)
             .contiguous(),
-            self.df_actuator[idx]
-            .unsqueeze(-1)
-            .to(self.device, non_blocking=True)
-            .contiguous(),
-            self.label[idx, :]
+            self.label[start, :]
             # .unsqueeze()
             .to(self.device, non_blocking=True),
         )

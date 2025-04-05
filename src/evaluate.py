@@ -2,7 +2,6 @@ from util.data import *
 import numpy as np
 from sklearn.metrics import precision_score, recall_score, roc_auc_score, f1_score
 import torch
-from torchmetrics.classification import BinaryStatScores
 from util.env import get_param
 from util.consts import Tasks
 
@@ -175,20 +174,24 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
     return max(final_topk_fmeas), pre, rec, auc_score, thresold
 
 
-def createMetrics(
-    test_result,
-    threshold=0.5,
-):
-    param = get_param()
-    device = param.device
-    if param.task is Tasks.next_sensors:
-        predicted_labels = test_result[3].sum(-1)
-    else:
-        predicted_labels = test_result[0]
-    pred = torch.where(predicted_labels > threshold, torch.tensor(1), torch.tensor(0))
-    bs = BinaryStatScores().to(device)
-    bs.update(pred.to(device), test_result[2].to(device))
-    metrics_tensor = bs.compute()
+def createStats(all_losses):
+
+    medians = all_losses.median(0).values
+    q = torch.quantile(
+        all_losses, torch.tensor([0.25, 0.75], device=get_param().device), dim=0
+    )
+    q = q[1] - q[0]
+    # TODO: 25/04/05 19:23:11 Instead of returning just one max, we can return maximum for every node
+    threshold = ((all_losses - medians).abs() / q).max()
+
+    return {
+        "medians": medians,
+        "iqr": q,
+        "threshold": threshold,
+    }
+
+
+def createMetrics(metrics_tensor):
     # Accuracy
     accuracy = (metrics_tensor[0] + metrics_tensor[2]) / metrics_tensor.sum()
 

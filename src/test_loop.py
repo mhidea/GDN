@@ -16,52 +16,61 @@ from util.data import *
 from util.preprocess import *
 from util.time import *
 from util.env import *
-from util.consts import Tasks
+from torchmetrics.classification import BinaryStatScores
+from evaluate import createMetrics
 
 
-def test(model, dataloader: DataLoader):
-    # test
-    param = get_param()
-    loss_func = param.loss_function()
-    device = param.device
+def test(model, dataloader: DataLoader, stats: dict = None):
+    """This is not batched
 
-    predicted_tensor = None
-    ground_sensor_tensor = []
-    ground_labels_tensor = []
-    loss_tensor = []
+    Args:
+        model (_type_): _description_
+        dataloader (DataLoader): Test data loader which is supposed not to be batched.
 
+    Returns:
+        tuple: predicted, y, labels, all_losses
+    """
     model.eval()
+    total_samples = dataloader.dataset.__len__()
+    param = get_param()
+    loss_func = torch.nn.L1Loss(reduction="none")
 
-    acu_loss = 0
+    if stats is None:
+        pass
+        all_losses = torch.zeros(
+            total_samples, model.node_num, device=param.device, requires_grad=False
+        )
+    else:
+        bs = BinaryStatScores().to(param.device)
+        acu_loss = 0
+
     t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False, position=1)
-    for windowed_x, y, next_label in t:
-
+    for b, (windowed_x, y, labels) in enumerate(t):
         with torch.no_grad():
+            y_truth = param.y_truth(y, labels)
             predicted = model(windowed_x)
-            y_truth = param.y_truth(y, next_label)
-            loss = loss_func(predicted, y_truth)
-            acu_loss += loss.sum().item()
-
-            if predicted_tensor is None:
-                predicted_tensor = predicted
-                ground_sensor_tensor = y
-                ground_labels_tensor = next_label
-                loss_tensor = loss
+            loss: torch.Tensor = loss_func(predicted, y_truth)
+            if stats is None:
+                pass
+                all_losses[
+                    b * param.batch : b * param.batch + windowed_x.shape[0], :
+                ] = (loss.detach().clone().squeeze(-1))
             else:
-                predicted_tensor = torch.cat((predicted_tensor, predicted), dim=0)
-                ground_sensor_tensor = torch.cat((ground_sensor_tensor, y), dim=0)
-                ground_labels_tensor = torch.cat(
-                    (ground_labels_tensor, next_label), dim=0
+                predicted_labels = (
+                    ((loss - stats["medians"]).abs() / stats["iqr"]).max(-1).values
                 )
-                loss_tensor = torch.cat((loss_tensor, loss), dim=0)
+                acu_loss += predicted_labels.sum()
+                pred = torch.where(
+                    predicted_labels > stats["threshold"],
+                    torch.tensor(1),
+                    torch.tensor(0),
+                )
+                bs.update(pred, labels.squeeze(-1))
+    if stats is None:
+        result = all_losses
+    else:
+        conf = bs.compute()
+        result = createMetrics(conf) | {"Loss": (acu_loss) / total_samples}
 
     t.close()
-
-    avg_loss = acu_loss / dataloader.dataset.__len__()
-
-    return avg_loss, [
-        predicted_tensor,
-        ground_sensor_tensor,
-        ground_labels_tensor,
-        loss_tensor,
-    ]
+    return result

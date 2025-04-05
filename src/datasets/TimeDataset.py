@@ -36,19 +36,18 @@ class TimeDataset(Dataset):
         self.stride = get_param().stride
 
     def __len__(self):
-        return self.df_sensor.shape[0] - self.window_length - 1
+        return (self.df_sensor.shape[0] - self.window_length - 1) // self.stride
 
     def __getitem__(self, idx):
-
+        start = idx * self.stride
         return (
-            self.df_sensor[idx : idx + self.window_length, :]
+            self.df_sensor[start : start + self.window_length, :]
             .mT.to(self.device, non_blocking=True)
             .contiguous(),
-            self.df_sensor[idx + self.window_length]
-            .unsqueeze(-1)
+            self.df_sensor[start + self.window_length]
             .to(self.device, non_blocking=True)
             .contiguous(),
-            self.label[idx + self.window_length, :]
+            self.label[start + self.window_length, :]
             # .unsqueeze()
             .to(self.device, non_blocking=True),
         )

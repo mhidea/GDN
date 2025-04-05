@@ -1,3 +1,4 @@
+from tkinter.dnd import dnd_start
 from main import Main
 from util.consts import *
 from util.env import *
@@ -13,14 +14,17 @@ if __name__ == "__main__":
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     set_param(param)
 
-    param.task = Tasks.next_label
-    param.dataset = Datasets.batadal
+    param.task = Tasks.next_sensors
+    param.dataset = Datasets.swat
     param.model = Models.gdn
     createPaths(param.model, param.dataset)
 
     model_parameters = param.model.getClass().getParmeters()
     model_parameters = {key: [model_parameters[key]] for key in model_parameters.keys()}
     print(model_parameters)
+
+    if param.task in [Tasks.current_label]:
+        param.window_length = 1
 
     if param.model == Models.gnn_tam:
         model_parameters = {
@@ -36,15 +40,16 @@ if __name__ == "__main__":
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [10],
-        "batch": [64],
-        "window_length": [5, 8, 15],
+        "epoch": [50],
+        "batch": [128],
+        "window_length": [5],
         "embedding_dimension": [64],
-        "topk": [5, 8, 15],
+        "topk": [15],
         "out_layer_inter_dim": [64],
         "out_layer_num": [1],
+        "stride": [10],
     }
-    grid = grid | model_parameters
+    grid = grid | model_parameters  # merge dicts
     createWriter(TensorBoardPath())
     _g = []
     total = 1

@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, Subset
 # Local Imports
 from datasets.TimeDataset import TimeDataset
 from datasets.CurrentDataset import CurrentDataset
-from evaluate import createMetrics
+from evaluate import createMetrics, createStats
 from test_loop import test
 from train_loop import train
 from util.consts import Tasks
@@ -92,7 +92,7 @@ class Main:
         self.val_dataloader = val_dataloader
         self.test_dataloader = DataLoader(
             test_dataset,
-            batch_size=self.param.batch,
+            batch_size=param.batch,
             shuffle=False,
             pin_memory=False,
         )
@@ -211,28 +211,9 @@ class Main:
 
         # Test the best model
         best_model = self.model.to(self.param.device)
-        _, val_result = test(best_model, self.val_dataloader)
-        _, test_result = test(best_model, self.test_dataloader)
-
-        # Determine threshold based on validation results
-        # Assuming val_result structure: [predictions, labels, attack_labels, optional_other_data]
-        # Assuming test_result structure: [predictions, labels, attack_labels, optional_other_data]
-        if self.param.task is Tasks.next_sensors:
-            # Assuming the 4th element (index 3) contains relevant scores for thresholding in this task
-            if len(val_result) > 3 and val_result[3] is not None:
-                thr = val_result[3].sum(-1).max()  # Example threshold logic
-            else:
-                # Fallback or error if expected data isn't present
-                print(
-                    "Warning: Expected validation data for thresholding not found for next_sensors task. Using default."
-                )
-                # Example fallback: use prediction max
-                thr = val_result[0].max()  # Adjust fallback as needed
-        else:
-            # Default threshold logic based on predictions (index 0)
-            thr = val_result[0].max()
-
-        scores = createMetrics(test_result, thr)
+        val_losses = test(best_model, self.val_dataloader)
+        val_stats = createStats(val_losses)
+        scores = test(best_model, self.test_dataloader, stats=val_stats)
 
         # Log results if the model was trained in this run
         if wasnt_trained:

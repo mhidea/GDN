@@ -27,9 +27,10 @@ class BaseModel(torch.nn.Module):
         assert out.shape[-2] == self.node_num
         # Out shape is (batch,nodes=sensors,windows)
 
-        if self.task == Tasks.next_sensors:
+        if self.task in [Tasks.next_sensors, Tasks.current_actuators]:
             out = out.squeeze(-1)
-        elif self.task == Tasks.next_label:
+        elif self.task in [Tasks.next_label, Tasks.current_label]:
+            # TODO: 25/04/04 17:30:49 maybe replace with mean(-1)
             out = out.squeeze(-1)
             out = self.nodes_to_label(out)
             out = torch.nn.functional.sigmoid(out)
