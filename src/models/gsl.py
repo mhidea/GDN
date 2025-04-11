@@ -53,7 +53,7 @@ class Graph_Directed_A(nn.Module):
 # A for Uni-directed graphs:
 class Graph_Uni_Directed_A(nn.Module):
     def __init__(self, n_nodes, window_size, alpha, k, device):
-        super(Graph_Directed_A, self).__init__()
+        super(Graph_Uni_Directed_A, self).__init__()
         self.alpha = alpha
         self.k = k
         self.device = device
@@ -83,7 +83,7 @@ class Graph_Uni_Directed_A(nn.Module):
 # A for Undirected graphs:
 class Graph_Undirected_A(nn.Module):
     def __init__(self, n_nodes, window_size, alpha, k, device):
-        super(Graph_Directed_A, self).__init__()
+        super(Graph_Undirected_A, self).__init__()
         self.alpha = alpha
         self.k = k
         self.device = device
@@ -103,6 +103,50 @@ class Graph_Undirected_A(nn.Module):
         return adj
 
 
+# A = Tanh(W)
+class Graph_Tanh_W(nn.Module):
+    def __init__(self, n_nodes, k, device):
+        super(Graph_Tanh_W, self).__init__()
+        self.num_nodes = n_nodes
+        self.k = k
+        self.device = device
+        self.A = nn.Parameter(
+            torch.randn(n_nodes, n_nodes).to(device), requires_grad=True
+        ).to(device)
+
+    def forward(self, idx):
+        adj = F.tanh(self.A)
+        if self.k:
+            mask = torch.zeros(idx.size(0), idx.size(0)).to(self.device)
+            mask.fill_(float("0"))
+            v, id = (adj.abs() + torch.rand_like(adj) * 0.01).topk(self.k, 1)
+            mask.scatter_(1, id, v.fill_(1))
+            adj = adj * mask
+        return adj
+
+
+# A = Tanh(aW) tanh with attention
+class Graph_Tanh_W(nn.Module):
+    def __init__(self, n_nodes, k, device):
+        super(Graph_Tanh_W, self).__init__()
+        self.num_nodes = n_nodes
+        self.k = k
+        self.device = device
+        self.A = nn.Parameter(
+            torch.randn(n_nodes, n_nodes).to(device), requires_grad=True
+        ).to(device)
+
+    def forward(self, idx):
+        adj = F.tanh(self.A)
+        if self.k:
+            mask = torch.zeros(idx.size(0), idx.size(0)).to(self.device)
+            mask.fill_(float("0"))
+            v, id = (adj.abs() + torch.rand_like(adj) * 0.01).topk(self.k, 1)
+            mask.scatter_(1, id, v.fill_(1))
+            adj = adj * mask
+        return adj
+
+
 class GSL(nn.Module):
     """
     Graph structure learning block.
@@ -112,15 +156,35 @@ class GSL(nn.Module):
         super(GSL, self).__init__()
         self.gsl_layer = None
         if gsl_type == "relu":
-            self.gsl_layer = Graph_ReLu_W(n_nodes, k, device)
+            self.gsl_layer = Graph_ReLu_W(n_nodes=n_nodes, k=k, device=device)
         elif gsl_type == "directed":
-            self.gsl_layer = Graph_Directed_A(n_nodes, window_size, alpha, k, device)
+            self.gsl_layer = Graph_Directed_A(
+                n_nodes=n_nodes,
+                window_size=window_size,
+                alpha=alpha,
+                k=k,
+                device=device,
+            )
         elif gsl_type == "unidirected":
             self.gsl_layer = Graph_Uni_Directed_A(
-                n_nodes, window_size, alpha, k, device
+                n_nodes=n_nodes,
+                window_size=window_size,
+                alpha=alpha,
+                k=k,
+                device=device,
             )
         elif gsl_type == "undirected":
-            self.gsl_layer = Graph_Undirected_A(n_nodes, window_size, alpha, k, device)
+            self.gsl_layer = Graph_Undirected_A(
+                n_nodes=n_nodes,
+                window_size=window_size,
+                alpha=alpha,
+                k=k,
+                device=device,
+            )
+        elif gsl_type == "tanh":
+            self.gsl_layer = Graph_Tanh_W(n_nodes=n_nodes, k=k, device=device)
+        # elif gsl_type == "tanh_a":
+        #     self.gsl_layer = Graph_TanhA_W(n_nodes=n_nodes, k=k, device=device)
         else:
             print("Wrong name of graph structure learning layer!")
 

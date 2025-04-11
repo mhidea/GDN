@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     param.task = Tasks.next_sensors
     param.dataset = Datasets.swat
-    param.model = Models.gdn
+    param.model = Models.gnn_tam
     createPaths(param.model, param.dataset)
 
     model_parameters = param.model.getClass().getParmeters()
@@ -29,10 +29,10 @@ if __name__ == "__main__":
     if param.model == Models.gnn_tam:
         model_parameters = {
             "n_gnn": [1],
-            "gsl_type": ["relu", "directed"],
+            "gsl_type": ["relu", "directed", "unidirected", "undirected", "tanh"],
             "alpha": [0.1],
         }
-    elif param.model == Models.my_tr:
+    elif param.model == Models.my_fw:
         model_parameters = {"sparsification_method": ["topk", "dropout"]}
     elif param.model == Models.diffpool:
         model_parameter = {"max_nodes": [150]}
@@ -42,9 +42,9 @@ if __name__ == "__main__":
     grid = {
         "epoch": [50],
         "batch": [128],
-        "window_length": [5],
+        "window_length": [5, 10],
         "embedding_dimension": [64],
-        "topk": [15],
+        "topk": [5, 10, 12, 15],
         "out_layer_inter_dim": [64],
         "out_layer_num": [1],
         "stride": [10],

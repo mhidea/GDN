@@ -15,23 +15,5 @@
     "python.analysis.logLevel": "Error",
     "python.analysis.extraPaths": [
         "./src"
-    ],
-    "actionButtons": {
-        "defaultColor": "#38bb38", // Can also use string color names.
-        "loadNpmCommands": false, // Disables automatic generation of actions for npm commands.
-        "reloadButton": "♻️", // Custom reload button text or icon (default ↻). null value enables automatic reload on configuration change
-        "commands": [
-            {
-                "cwd": "${workspaceFolder}", // Terminal initial folder ${workspaceFolder} and os user home as defaults
-                "name": "$(triangle-right) TB",
-                "singleInstance": true,
-                "command": "tensorboard.launch", // This is executed in the terminal.
-            },
-            {
-                "cwd": "${workspaceFolder}",
-                "name": "$(globe) TB",
-                "command": "tensorboard --logdir ${fileDirname}",
-            }
-        ]
-    }
+    ]
 }

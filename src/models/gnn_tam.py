@@ -103,7 +103,7 @@ class GNN_TAM(BaseModel):
             self.h[i] = self.h[i] + self.skip[i]
 
         h = torch.cat(self.h, 1)
-        output = self.fc(h)
+        output = self.fc(h).unsqueeze(-1)
 
         return output
 
