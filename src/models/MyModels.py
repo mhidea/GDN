@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
 from models.BaseModel import BaseModel
+from torch_geometric.nn import GCNConv, GAT
 
 
 class TimeWindowGNN(BaseModel):
@@ -177,12 +178,6 @@ class TimeWindowGNN(BaseModel):
 
     def getParmeters():
         return {"sparsification_method": "topk"}
-
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
 
 
 class FeatureWindowGNN(BaseModel):

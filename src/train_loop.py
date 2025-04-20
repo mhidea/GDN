@@ -44,6 +44,7 @@ def train(
 
     acu_loss = 0
     min_loss = 1e8
+    min_train_loss = 1e8
 
     epoch = param.epoch
     early_stop_win = 15
@@ -61,7 +62,7 @@ def train(
         t = tqdm.tqdm(
             dataloader,
             desc="epoc {} / {}".format((i_epoch + 1), epoch),
-            postfix="{loss}",
+            postfix="{loss} {val_loss}",
             position=0,
         )
         acu_loss = 0
@@ -94,56 +95,68 @@ def train(
             optimizer.step()
 
             acu_loss += loss.item()
-            t.set_postfix({"loss": (loss.item() / windowed_x.shape[0])})
+            t.set_postfix({"loss": (loss.item() / windowed_x.shape[0]), "val_loss": 0})
             if i == 0:
                 avg_loss = acu_loss / total_samples
-                t.set_postfix({"loss": avg_loss})
+
+                stats = createStats(all_losses=all_losses)
+
+                if val_dataloader is not None:
+                    scores: dict = test(model, val_dataloader, stats=stats)
+                    val_loss = scores["Loss"]
+                    t.set_postfix(
+                        {
+                            "loss": avg_loss,
+                            "val_loss": val_loss.item(),
+                        }
+                    )
+                    stats_dict = {key: scores[key] for key in filter_keis}
+                    metrics_dict = {
+                        key: scores[key]
+                        for key in scores.keys()
+                        if key not in filter_keis
+                    }
+
+                    getWriter().add_scalars(
+                        main_tag=getTag("val_stats/epoch_"),
+                        global_step=i_epoch,
+                        tag_scalar_dict=stats_dict,
+                    )
+                    getWriter().add_scalars(
+                        main_tag=getTag("val_metrics/epoch_"),
+                        global_step=i_epoch,
+                        tag_scalar_dict=metrics_dict,
+                    )
+                    getWriter().add_scalars(
+                        main_tag=getTag("loss"),
+                        global_step=i_epoch,
+                        tag_scalar_dict={
+                            "train": avg_loss,
+                            "val": val_loss,
+                        },
+                    )
+                    # Save the model with the least loss on train data
+                    if acu_loss < min_train_loss:
+                        torch.save(
+                            model.state_dict(),
+                            param.best_path().replace("best.pt", "best_train.pt"),
+                        )
+                        min_train_loss = acu_loss
+
+                    # Save the model with the least loss on validation data
+                    if val_loss < min_loss:
+                        torch.save(model.state_dict(), param.best_path())
+
+                        min_loss = val_loss
+                        stop_improve_count = 0
+                    else:
+                        stop_improve_count += 1
+
+                    if stop_improve_count >= early_stop_win:
+                        break
+
+                else:
+                    if acu_loss < min_loss:
+                        torch.save(model.state_dict(), param.best_path())
+                        min_loss = acu_loss
                 t.close()
-        # use val dataset to judge
-        # if param.task is Tasks.next_sensors:
-        #     threshold = avg_loss
-
-        stats = createStats(all_losses=all_losses)
-
-        if val_dataloader is not None:
-            scores: dict = test(model, val_dataloader, stats=stats)
-            val_loss = scores["Loss"]
-            stats_dict = {key: scores[key] for key in filter_keis}
-            metrics_dict = {
-                key: scores[key] for key in scores.keys() if key not in filter_keis
-            }
-
-            getWriter().add_scalars(
-                main_tag=getTag("val_stats/epoch_"),
-                global_step=i_epoch,
-                tag_scalar_dict=stats_dict,
-            )
-            getWriter().add_scalars(
-                main_tag=getTag("val_metrics/epoch_"),
-                global_step=i_epoch,
-                tag_scalar_dict=metrics_dict,
-            )
-            getWriter().add_scalars(
-                main_tag=getTag("loss"),
-                global_step=i_epoch,
-                tag_scalar_dict={
-                    "train": avg_loss,
-                    "val": val_loss,
-                },
-            )
-
-            if val_loss < min_loss:
-                torch.save(model.state_dict(), param.best_path())
-
-                min_loss = val_loss
-                stop_improve_count = 0
-            else:
-                stop_improve_count += 1
-
-            if stop_improve_count >= early_stop_win:
-                break
-
-        else:
-            if acu_loss < min_loss:
-                torch.save(model.state_dict(), param.best_path())
-                min_loss = acu_loss

@@ -36,7 +36,6 @@ def test(model, dataloader: DataLoader, stats: dict = None):
     loss_func = torch.nn.L1Loss(reduction="none")
 
     if stats is None:
-        pass
         all_losses = torch.zeros(
             total_samples, model.node_num, device=param.device, requires_grad=False
         )
@@ -51,7 +50,6 @@ def test(model, dataloader: DataLoader, stats: dict = None):
             predicted = model(windowed_x)
             loss: torch.Tensor = loss_func(predicted, y_truth)
             if stats is None:
-                pass
                 all_losses[
                     b * param.batch : b * param.batch + windowed_x.shape[0], :
                 ] = (loss.detach().clone().squeeze(-1))

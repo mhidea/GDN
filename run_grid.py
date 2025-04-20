@@ -29,7 +29,8 @@ if __name__ == "__main__":
     if param.model == Models.gnn_tam:
         model_parameters = {
             "n_gnn": [1],
-            "gsl_type": ["relu", "directed", "unidirected", "undirected", "tanh"],
+            # "relu", "directed", "unidirected", "undirected", "tanh"
+            "gsl_type": ["undirected"],
             "alpha": [0.1],
         }
     elif param.model == Models.my_fw:
@@ -42,9 +43,9 @@ if __name__ == "__main__":
     grid = {
         "epoch": [50],
         "batch": [128],
-        "window_length": [5, 10],
+        "window_length": [5],
         "embedding_dimension": [64],
-        "topk": [5, 10, 12, 15],
+        "topk": [15],
         "out_layer_inter_dim": [64],
         "out_layer_num": [1],
         "stride": [10],
