@@ -3,6 +3,7 @@ import numpy as np
 import re
 import pandas as pd
 import torch
+import torch_geometric
 
 
 def get_most_common_features(target, all_features, max=3, min=3):

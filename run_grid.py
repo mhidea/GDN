@@ -1,8 +1,9 @@
 from tkinter.dnd import dnd_start
-from main import Main
+from main import Main, DatasetLoader
 from util.consts import *
 from util.env import *
 import itertools
+from evaluate import IqrThreshold
 
 import torch
 import pickle
@@ -14,15 +15,19 @@ if __name__ == "__main__":
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     set_param(param)
 
+    # main define task
     param.task = Tasks.next_sensors
-    param.dataset = Datasets.swat
-    param.model = Models.gnn_tam
+    param.dataset = Datasets.batadal
+    param.model = Models.my_mstgat
+    param.datasetLoader = DatasetLoader.findModality
+    setThreshold(IqrThreshold())
     createPaths(param.model, param.dataset)
 
     model_parameters = param.model.getClass().getParmeters()
     model_parameters = {key: [model_parameters[key]] for key in model_parameters.keys()}
-    print(model_parameters)
+    print("#### Default model extra parameters : \n", model_parameters)
 
+    # params per specific task
     if param.task in [Tasks.current_label]:
         param.window_length = 1
 
@@ -36,20 +41,25 @@ if __name__ == "__main__":
     elif param.model == Models.my_fw:
         model_parameters = {"sparsification_method": ["topk", "dropout"]}
     elif param.model == Models.diffpool:
-        model_parameter = {"max_nodes": [150]}
+        model_parameters = {"max_nodes": [150]}
+    elif param.model in [Models.my_mstgat, Models.my_mstgat2]:
+        model_parameters = {"gamma1": [0.5], "gamma2": [0.8], "kernel_size": [16]}
 
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [50],
-        "batch": [128],
-        "window_length": [5],
-        "embedding_dimension": [64],
-        "topk": [15],
-        "out_layer_inter_dim": [64],
-        "out_layer_num": [1],
-        "stride": [10],
+        "epoch": [2],
+        "batch": [16],
+        "window_length": [32],
+        "embedding_dimension": [16],
+        "topk": [30],
+        "out_layer_inter_dim": [32],
+        "out_layer_num": [1, 2, 3],
+        # use stride for dabase summerizatoion . default = 1 (no summerization)
+        "stride": [30],
     }
+
+    # merge parameters
     grid = grid | model_parameters  # merge dicts
     createWriter(TensorBoardPath())
     _g = []
@@ -87,5 +97,4 @@ if __name__ == "__main__":
         # main.model = torch.compile(main.model)
         # main.profile()
         # continue
-
         main.run(i)

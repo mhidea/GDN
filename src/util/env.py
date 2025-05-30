@@ -2,8 +2,9 @@ import numpy as np
 import datetime
 import os
 from util.consts import Datasets, Models
-from util.params import Params
+from parameters.params import Params
 from torch.utils.tensorboard.writer import SummaryWriter
+from evaluate import BaseThreshold
 
 _tensorborad_path = None
 _snapshot_path = None
@@ -11,6 +12,17 @@ _param: Params = None
 _writer: SummaryWriter = None
 _run_time = None
 _tag_suffix = None
+_threshold: BaseThreshold = None
+
+
+def setThreshold(thr: BaseThreshold):
+    global _threshold
+    _threshold = thr
+
+
+def getThreshold() -> BaseThreshold:
+    global _threshold
+    return _threshold
 
 
 def setTag(run: int):

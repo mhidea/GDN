@@ -17,10 +17,13 @@ from util.preprocess import *
 from util.time import *
 from util.env import *
 from torchmetrics.classification import BinaryStatScores
-from evaluate import createMetrics
+from typing import Tuple
+from parameters.StatisticalParameters import StatisticalParameters
+from parameters.MetricsParameters import MetricsParameters
+from evaluate import MyConfusuion
 
 
-def test(model, dataloader: DataLoader, stats: dict = None):
+def test(model, dataloader: DataLoader, confusion: MyConfusuion = None):
     """This is not batched
 
     Args:
@@ -33,42 +36,30 @@ def test(model, dataloader: DataLoader, stats: dict = None):
     model.eval()
     total_samples = dataloader.dataset.__len__()
     param = get_param()
-    loss_func = torch.nn.L1Loss(reduction="none")
 
-    if stats is None:
-        all_losses = torch.zeros(
-            total_samples, model.node_num, device=param.device, requires_grad=False
-        )
-    else:
-        bs = BinaryStatScores().to(param.device)
-        acu_loss = 0
+    all_losses = torch.zeros(
+        total_samples, model.node_num, device=param.device, requires_grad=False
+    )
+    acu_loss = 0
 
     t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False, position=1)
-    for b, (windowed_x, y, labels) in enumerate(t):
-        with torch.no_grad():
-            y_truth = param.y_truth(y, labels)
-            predicted = model(windowed_x)
-            loss: torch.Tensor = loss_func(predicted, y_truth)
-            if stats is None:
-                all_losses[
-                    b * param.batch : b * param.batch + windowed_x.shape[0], :
-                ] = (loss.detach().clone().squeeze(-1))
-            else:
-                predicted_labels = (
-                    ((loss - stats["medians"]).abs() / stats["iqr"]).max(-1).values
+    y_truth_index = param.y_truth_index()
+    with torch.no_grad():
+        # data = (windowed_x, y, labels)
+        for b, data in enumerate(t):
+            loss: torch.Tensor = model.loss(
+                data[0],
+                data[y_truth_index],
+            )
+
+            all_losses[b * param.batch : b * param.batch + data[0].shape[0], :] = (
+                loss.detach().clone().squeeze(-1)
+            )
+            if confusion is not None:
+                confusion.update(
+                    loss,
+                    data[2].squeeze(-1),
                 )
-                acu_loss += predicted_labels.sum()
-                pred = torch.where(
-                    predicted_labels > stats["threshold"],
-                    torch.tensor(1),
-                    torch.tensor(0),
-                )
-                bs.update(pred, labels.squeeze(-1))
-    if stats is None:
-        result = all_losses
-    else:
-        conf = bs.compute()
-        result = createMetrics(conf) | {"Loss": (acu_loss) / total_samples}
 
     t.close()
-    return result
+    return all_losses

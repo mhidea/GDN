@@ -3,6 +3,7 @@ results/
 logs/
 runs/
 temp/
+tmp/
 run_copy.sh
 __pycache__
 board/

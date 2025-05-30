@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GCNConv, GCN
 from models.BaseModel import BaseModel
-from torch_geometric.nn import GCNConv, GAT
+from torch_geometric.nn import GCNConv, GAT, MLP, DenseGCNConv
+from torch_geometric.utils import dense_to_sparse
+from torch_geometric.data import Data, Batch
 
 
 class TimeWindowGNN(BaseModel):
@@ -530,3 +532,117 @@ class GNN_LSTM_AnomalyDetector_Optimized(BaseModel):
 
     def getParmeters():
         return {"lstm_layers": 1}
+
+
+class MyGAT(BaseModel):
+    """docstring for MyGAT."""
+
+    def __init__(self, **kwargs):
+        super(MyGAT, self).__init__(**kwargs)
+
+        self.adj = torch.nn.Parameter(
+            dense_to_sparse(torch.ones(self.node_num, self.node_num))[0],
+            requires_grad=False,
+        )
+        self.w = torch.nn.Parameter(
+            torch.rand(self.node_num * self.node_num), requires_grad=True
+        )
+        self.w.requires_grad = True
+        self.gcn = GCNConv(self.param.window_length, self.param.window_length)
+        self.att_layer = GAT(
+            self.param.window_length,
+            self.param.out_layer_inter_dim,
+            self.param.out_layer_num,
+        )
+        self.lin = torch.nn.Linear(self.param.out_layer_inter_dim, 1)
+        self.relu = torch.nn.ReLU()
+
+    def weigthAdj(self):
+        return self.w
+
+    def pre_forward(self, x: torch.Tensor):
+        x = self.gcn(x=x, edge_index=self.adj, edge_weight=self.w)
+        const_weight = self.w.detach().narrow_copy(0, 0, self.node_num * self.node_num)
+        const_weight.requires_grad = False
+        if x.dim() == 3:
+            xl = [Data(x=x_, edge_index=self.adj, edge_weight=const_weight) for x_ in x]
+            data = Batch.from_data_list(xl)
+        else:
+            data = Data(x=x, edge_index=self.adj, edge_weight=const_weight)
+
+        x = self.att_layer(
+            x=data.x, edge_index=data.edge_index, edge_weight=data.edge_weight
+        )
+        x = self.relu(x)
+        x = self.lin(x.view(-1, self.param.out_layer_inter_dim))
+        # x = F.sigmoid(x)
+        return x.view(-1, self.node_num, 1)
+
+
+class MyGATEmbd(BaseModel):
+    """docstring for MyGAT."""
+
+    def __init__(self, **kwargs):
+        super(MyGATEmbd, self).__init__(**kwargs)
+
+        self.node_embedding = torch.nn.Parameter(
+            torch.rand(
+                self.node_num, self.param.embedding_dimension, requires_grad=True
+            )
+        )
+        self.directed = False
+        self.conv1 = GCNConv(
+            self.param.window_length,
+            self.param.out_layer_inter_dim,
+            cached=True,
+            normalize=False,
+        )
+        self.conv2 = GCNConv(
+            self.param.out_layer_inter_dim,
+            1,
+            cached=True,
+            normalize=False,
+        )
+
+    def init_parameters(self):
+        nn.init.xavier_uniform_(self.node_embedding)
+
+    def adj(self):
+        # Normalize embeddings for stable cosine similarity
+        # normalized_embeddings = F.normalize(self.node_embedding, p=2, dim=1)
+
+        # Compute cosine similarity matrix
+        # w = self.node_embedding(
+        #     torch.arange(self.node_num, requires_grad=False).to(self.param.device)
+        # )
+        # sim_matrix = torch.mm(w, w.t())
+        sim_matrix = self.node_embedding @ self.node_embedding.t()
+        # Ensure self-similarity is not selected
+        sim_matrix.fill_diagonal_(-1)  # Set diagonal to -1 to exclude self-connections
+
+        # Get top-k neighbors for each node
+        topk_values, topk_indices = torch.topk(sim_matrix, k=self.param.topk, dim=1)
+
+        # Create binary adjacency mask
+        adj_mask = torch.zeros_like(sim_matrix)
+        adj_mask.scatter_(1, topk_indices, 1.0)
+
+        # For undirected graphs, ensure symmetric connections
+        if not self.directed:
+            adj_mask = torch.max(adj_mask, adj_mask.t())
+            adj_mask.fill_diagonal_(0)  # Remove self-loops
+
+        return adj_mask
+
+    def weigthAdj(self):
+        with torch.no_grad():
+            adj, w = dense_to_sparse(self.adj())
+        return w
+
+    def forward(self, data):
+        adj, w = dense_to_sparse(self.adj())
+        x = self.conv1(data, edge_index=adj, edge_weight=w)
+        x = F.relu(x)
+        x = self.conv2(x, edge_index=adj, edge_weight=w)
+        x = F.sigmoid(x)
+        return x

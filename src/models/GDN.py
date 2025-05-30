@@ -131,11 +131,11 @@ class GDN(BaseModel):
     def init_params(self):
         nn.init.kaiming_uniform_(self.embedding.weight, a=math.sqrt(5))
 
-    def pre_forward(self, data):
-        x = data.clone().detach()
+    def pre_forward(self, x):
+        # x = data.clone().detach()
         edge_index_sets = self.edge_index_sets
 
-        device = data.device
+        device = x.device
 
         batch_num, node_num, all_feature = x.shape
         x = x.view(-1, all_feature).contiguous()

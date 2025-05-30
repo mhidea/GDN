@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 import numpy as np
 from util.consts import Tasks
-from util.params import Params
+from parameters.params import Params
 import pandas as pd
 from util.env import get_param
 

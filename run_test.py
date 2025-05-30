@@ -1,5 +1,5 @@
 import pickle
-from util.params import Params
+from parameters.params import Params
 from util.env import set_param
 from main import Main
 

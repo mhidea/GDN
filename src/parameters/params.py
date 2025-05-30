@@ -1,4 +1,4 @@
-from util.consts import Datasets, Models, Tasks
+from util.consts import Datasets, Models, Tasks, DatasetLoader
 from tabulate import tabulate
 import os
 import torch
@@ -6,12 +6,12 @@ import numpy as np
 import random
 import inspect
 import enum
+from parameters.BaseParameter import BaseParameter
 
 
-class Params:
+class Params(BaseParameter):
     def __init__(
         self,
-        batch: int = 128,
         epoch: int = 50,
         window_length: int = 5,
         embedding_dimension: int = 64,
@@ -27,9 +27,11 @@ class Params:
         topk: int = 5,
         model: Models = Models.gdn,
         task: Tasks = Tasks.next_label,
+        datasetLoader: DatasetLoader = DatasetLoader.findSensorActuator,
         device: str = "cuda",
         lstm_hidden_dim=64,
         lstm_layers_num=1,
+        batch=32,
     ):
         self._batch = batch
         self._epoch = epoch
@@ -47,6 +49,7 @@ class Params:
         self._topk = topk
         self._model = model
         self._task = task
+        self._datasetLoader = datasetLoader
         self._device = device
         self._lstm_hidden_dim = lstm_hidden_dim
         self._lstm_layers_num = lstm_layers_num
@@ -247,6 +250,17 @@ class Params:
         self._model = value
 
     @property
+    def datasetLoader(self) -> DatasetLoader:
+        """
+        Gets or sets the datasetLoader object.
+        """
+        return self._datasetLoader
+
+    @datasetLoader.setter
+    def datasetLoader(self, value: DatasetLoader):
+        self._datasetLoader = value
+
+    @property
     def task(self) -> Tasks:
         """
         Gets or sets the task object.
@@ -268,58 +282,6 @@ class Params:
     @device.setter
     def device(self, value: str):
         self._device = value
-
-    def toDict(self) -> dict:
-
-        properties = [
-            name
-            for name, attr in inspect.getmembers(type(self))
-            if isinstance(attr, property)
-        ]
-        return {
-            a: (
-                getattr(self, a).value
-                if isinstance(getattr(self, a), enum.Enum)
-                else getattr(self, a)
-            )
-            for a in properties
-        }
-
-    def summary(self, tablefmt: str = "github", extra_dict: dict = None):
-        """
-        Creates a summary table of all properties and their values using tabulate.
-        Splits tables into chunks of at most five columns.
-        """
-        # Join and return all tables
-        summary_output = f"### {self.best_path()}\n\n"
-        if extra_dict is None:
-            summary_output += f"#### NO EXTRA PARAMETERS.\n\n"
-        else:
-            summary_output += f"#### EXTRA PARAMETERS :\n\n"
-            summary_output += self.__dict_to_table(value=extra_dict, tablefmt=tablefmt)
-        summary_output += f"\n\n#### PARAMETERS :\n\n"
-        summary_output += self.__dict_to_table(value=self.toDict(), tablefmt=tablefmt)
-        return summary_output
-
-    def __dict_to_table(self, value: dict, tablefmt) -> str:
-        # Define headers and prepare tables
-        headers = [key for key in value.keys()]
-        values = [
-            str(value[key]) for key in headers
-        ]  # Convert values to strings for display
-        tables = []
-        # Split into chunks of at most 5 columns
-        for i in range(0, len(headers), 5):
-            chunk_headers = headers[i : i + 5]
-            chunk_values = [values[i : i + 5]]  # Single row for the values
-            table = tabulate(
-                chunk_values,
-                headers=chunk_headers,
-                tablefmt=tablefmt,
-                stralign="center",
-            )
-            tables.append(table)
-        return "\n\n".join(tables)
 
     def trained(self) -> bool:
         """
@@ -343,8 +305,15 @@ class Params:
         if self.task is Tasks.next_label:
             return torch.nn.BCELoss(reduction="none")
 
-    def y_truth(self, y, label) -> torch.Tensor:
+    def y_truth_index(self):
+
         if self.task in [Tasks.next_sensors, Tasks.current_actuators]:
-            return y
+            return 1
         if self.task in [Tasks.next_label, Tasks.current_label]:
-            return label
+            return 2
+
+    def summary(self, tablefmt: str = "github", extra_dict: dict = None):
+        summary_output = f"### {self.best_path()}\n\n" + super().summary(
+            tablefmt, extra_dict
+        )
+        return summary_output

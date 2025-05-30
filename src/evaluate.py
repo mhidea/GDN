@@ -2,8 +2,96 @@ from util.data import *
 import numpy as np
 from sklearn.metrics import precision_score, recall_score, roc_auc_score, f1_score
 import torch
-from util.env import get_param
 from util.consts import Tasks
+from parameters.StatisticalParameters import StatisticalParameters
+from parameters.MetricsParameters import MetricsParameters
+from torchmetrics.classification import BinaryConfusionMatrix
+
+
+class BaseThreshold:
+    """docstring for BaseThreshold."""
+
+    def __init__(self):
+        super(BaseThreshold, self).__init__()
+
+    def fit(self, loss: torch.Tensor):
+        pass
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        return loss
+
+    def loadFromPath(self, path):
+        pass
+
+    def save(self, path):
+        pass
+
+    def summary(self):
+        return "This is the best class for defining threshold for classification."
+
+
+class IqrThreshold(BaseThreshold):
+    """docstring for IqrThreshold."""
+
+    def __init__(self):
+        super(IqrThreshold, self).__init__()
+        self.stats: StatisticalParameters = None
+
+    def fit(self, losses: torch.Tensor):
+        self.stats = createIrqStats(losses)
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            predicted_labels = (
+                ((loss - self.stats.medians).abs() / self.stats.iqr).max(-1).values
+            )
+            preds = torch.where(
+                predicted_labels > self.stats.threshold,
+                1,
+                0,
+            )
+        return preds
+
+    def summary(self):
+        return "IqrThreshold:\n\n" + self.stats.summary()
+
+
+class MaxLossThreshold(BaseThreshold):
+    """docstring for MaxLossThreshold."""
+
+    def __init__(self):
+        super(MaxLossThreshold, self).__init__()
+        self.max = 0.0
+
+    def fit(self, losses: torch.Tensor):
+        _loss = losses.clone()
+        if _loss.dim() == 2:
+            _loss = _loss.sum(-1)
+        self.max = _loss.max()
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            predicted_labels = (
+                ((loss - self.stats.medians).abs() / self.stats.iqr).max(-1).values
+            )
+            acu_loss += predicted_labels.sum()
+            preds = torch.where(
+                predicted_labels > self.stats.threshold,
+                1,
+                0,
+            )
+        return preds
+
+
+class MyConfusuion(BinaryConfusionMatrix):
+    """docstring for MyConfusuion."""
+
+    def __init__(self, *args, thr: BaseThreshold, **kwargs):
+        super(MyConfusuion, self).__init__(*args, **kwargs)
+        self.thr = thr
+
+    def update(self, loss: torch.Tensor, target: torch.Tensor) -> None:
+        super().update(self.thr.transform(loss), target)
 
 
 def get_full_err_scores(test_result, val_result):
@@ -174,55 +262,14 @@ def get_best_performance_data(total_err_scores, gt_labels, topk=1):
     return max(final_topk_fmeas), pre, rec, auc_score, thresold
 
 
-def createStats(all_losses):
+def createIrqStats(all_losses) -> StatisticalParameters:
 
     medians = all_losses.median(0).values
     q = torch.quantile(
-        all_losses, torch.tensor([0.25, 0.75], device=get_param().device), dim=0
+        all_losses, torch.tensor([0.25, 0.75], device=all_losses.device), dim=0
     )
     q = q[1] - q[0]
     # TODO: 25/04/05 19:23:11 Instead of returning just one max, we can return maximum for every node
     threshold = ((all_losses - medians).abs() / q).max()
 
-    return {
-        "medians": medians,
-        "iqr": q,
-        "threshold": threshold,
-    }
-
-
-def createMetrics(metrics_tensor):
-    # Accuracy
-    accuracy = (metrics_tensor[0] + metrics_tensor[2]) / metrics_tensor.sum()
-
-    # Precision
-    precision = (
-        metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[1])
-        if (metrics_tensor[0] + metrics_tensor[1]) != 0
-        else torch.tensor(0)
-    )
-
-    # Recall
-    recall = (
-        metrics_tensor[0] / (metrics_tensor[0] + metrics_tensor[3])
-        if (metrics_tensor[0] + metrics_tensor[3]) != 0
-        else torch.tensor(0)
-    )
-
-    # F1 Score
-    f1_score = (
-        2 * (precision * recall) / (precision + recall)
-        if (precision + recall) != 0
-        else torch.tensor(0)
-    )
-    metrics = {
-        "TP": metrics_tensor[0].item(),
-        "FP": metrics_tensor[1].item(),
-        "TN": metrics_tensor[2].item(),
-        "FN": metrics_tensor[3].item(),
-        "Accuracy": accuracy.item(),
-        "Precision": precision.item(),
-        "Recall": recall.item(),
-        "F1": f1_score.item(),
-    }
-    return metrics
+    return StatisticalParameters(medians, q, threshold)

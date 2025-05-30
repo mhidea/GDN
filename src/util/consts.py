@@ -24,9 +24,14 @@ class Models(Enum):
     gdn_lstm_start = "models.GDN.GDNLstmStart"
     gnn_tam_relu = "models.gnn_tam.GNN_TAM_RELU"
     gnn_tam = "models.gnn_tam.GNN_TAM"
-    my_tr = "models.MyModels.TimeWindowGNN"
-    my_fw = "models.MyModels.FeatureWindowGNN"
-    my_gnn_lstm = "models.MyModels.GNN_LSTM_AnomalyDetector_Optimized"
+    my_tr = "models.mine.MyModels.TimeWindowGNN"
+    my_fw = "models.mine.MyModels.FeatureWindowGNN"
+    my_gat = "models.mine.MyModels.MyGAT"
+    my_gat_embd = "models.mine.MyModels.MyGATEmbd"
+    my_gnn_lstm = "models.mine.MyModels.GNN_LSTM_AnomalyDetector_Optimized"
+    my_gcn = "models.mine.MyGCN.MyGCN"
+    my_mstgat = "models.mine.MSTGAT.MSTGAT"
+    my_mstgat2 = "models.mine.MSTGAT2.MSTGAT2"
     diffpool = "models.DiffPool.DiffPool"
     diffpool_lstm_start = "models.DiffPool.DiffPoolLstmStart"
 
@@ -40,3 +45,9 @@ class Models(Enum):
 
         # Get the class from the module
         return getattr(module, class_name)
+
+
+class DatasetLoader(Enum):
+    findSensorActuator = 1
+    findModality = 2
+    noFindSensorActuator = 3
