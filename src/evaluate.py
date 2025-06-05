@@ -30,6 +30,121 @@ class BaseThreshold:
         return "This is the best class for defining threshold for classification."
 
 
+class IqrSensorThreshold(BaseThreshold):
+    """docstring for IqrThreshold."""
+
+    def __init__(self):
+        super(IqrSensorThreshold, self).__init__()
+        self.q = None
+        self.medians = None
+        self.threshold = None
+
+    def fit(self, losses: torch.Tensor):
+        self.medians = losses.median(0).values
+        q = torch.quantile(
+            losses, torch.tensor([0.25, 0.75], device=losses.device), dim=0
+        )
+        self.q = q[1] - q[0]
+        # TODO: 25/04/05 19:23:11 Instead of returning just one max, we can return maximum for every node
+        self.threshold = ((losses - self.medians).abs() / self.q).max(dim=0)[0]
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            predicted_labels = (loss - self.medians).abs() / self.q
+            preds = torch.where(
+                predicted_labels > self.threshold,
+                1,
+                0,
+            ).sum(-1)
+            preds = torch.where(
+                preds > 0,
+                1,
+                0,
+            )
+        return preds
+
+    def summary(self):
+        return "IqrThreshold:\n\n" + self.stats.summary()
+
+
+class ZscoreThreshold(BaseThreshold):
+    """docstring for MinMaxThreshold."""
+
+    def __init__(self, threshold=1.0):
+        super(ZscoreThreshold, self).__init__()
+        self.mean = None
+        self.std = None
+        self.threshold = threshold
+
+    def fit(self, losses: torch.Tensor):
+
+        self.mean = losses.mean(dim=0)
+        self.std = losses.std(dim=0)
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+
+            preds = (
+                (((loss - self.mean) / self.std).abs() > self.threshold).int().sum(-1)
+            )
+            preds = torch.where(
+                preds > 0,
+                1,
+                0,
+            )
+        return preds
+
+
+class AbsMaxThreshold(BaseThreshold):
+    """docstring for MinMaxThreshold."""
+
+    def __init__(self, multiplier=1.0):
+        super(AbsMaxThreshold, self).__init__()
+        self.max = None
+        self.multiplier = multiplier
+
+    def fit(self, losses: torch.Tensor):
+
+        self.max = losses.abs().max(dim=0).values * self.multiplier
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+
+            preds = ((loss.abs() > self.max)).int().sum(-1)
+            preds = torch.where(
+                preds > 0,
+                1,
+                0,
+            )
+        return preds
+
+
+class MinMaxThreshold(BaseThreshold):
+    """docstring for MinMaxThreshold."""
+
+    def __init__(self, multiplier=1.0):
+        super(MinMaxThreshold, self).__init__()
+        self.min = None
+        self.max = None
+        self.multiplier = multiplier
+
+    def fit(self, losses: torch.Tensor):
+
+        self.min = losses.min(dim=0).values * self.multiplier
+        self.max = losses.max(dim=0).values * self.multiplier
+
+    def transform(self, loss: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+
+            preds = ((loss > self.max) | (loss < self.min)).int().sum(-1)
+            preds = torch.where(
+                preds > 0,
+                1,
+                0,
+            )
+        return preds
+
+
 class IqrThreshold(BaseThreshold):
     """docstring for IqrThreshold."""
 
@@ -273,3 +388,15 @@ def createIrqStats(all_losses) -> StatisticalParameters:
     threshold = ((all_losses - medians).abs() / q).max()
 
     return StatisticalParameters(medians, q, threshold)
+
+
+if __name__ == "__main__":
+    thr = MinMaxThreshold()
+    train = torch.randn((6, 3)) * 1.2
+    print(train)
+    thr.fit(train)
+    print(thr.min)
+    print(thr.max)
+    test = torch.randn((3, 3))
+    print(test)
+    print(thr.transform(test))

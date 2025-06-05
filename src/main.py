@@ -33,21 +33,16 @@ _columns = None
 
 class Main:
 
-    def __init__(
-        self,
-        param: Params,
-        debug=False,
-        scale=True,
-        modelParams={},
-    ):
-        adj = None
+    def __init__(self, param: Params, scale=True, modelParams={}, adj=None):
         self.param = param
         self.modelParams = modelParams
 
         dataset_name = self.param.dataset.value
         print(f"# DATASET \n\n*{self.param.dataset}*")
         if param.datasetLoader == DatasetLoader.findModality:
-            train, test, adj = self._preapareDF_modal(scale, dataset=dataset_name)
+            train, test, df_adj = self._preapareDF_modal(scale, dataset=dataset_name)
+            if adj is None:
+                adj = df_adj
             sensors = train.columns
             actuators = []
         elif param.datasetLoader == DatasetLoader.findSensorActuator:
@@ -134,6 +129,11 @@ class Main:
             )
         # self.model = torch.compile(self.model, mode="reduce-overhead")
 
+    def load_leastTrain(self):
+        self.model.load_state_dict(
+            torch.load(self.param.least_train_loss_path(), weights_only=True)
+        )
+
     def _preapareDF_modal(self, scale, dataset):
         global _train_original
         global _test_original
@@ -150,13 +150,17 @@ class Main:
                 index_col=0,
             )
 
-            #     columns = [
-            #     col for col in _train_original if col.strip() not in ["datetime", "Timestamp"]
-            # ]
+            # remove white spaces in collumn names
+            columns = {col: col.strip() for col in _train_original.columns}
+            _train_original = _train_original.rename(columns=columns)
+
+            columns = {col: col.strip() for col in _test_original.columns}
+            _test_original = _test_original.rename(columns=columns)
             # _train_original=_train_original[columns]
             # _test_original=_test_original[columns]
 
             for i, col in enumerate(_train_original.columns):
+                print(_train_original.columns[i], _test_original.columns[i])
                 assert _train_original.columns[i] == _test_original.columns[i]
         stripped_columns = [re.sub(r"\d+", "", s) for s in _train_original.columns]
         adj = torch.zeros(len(stripped_columns), len(stripped_columns))
@@ -266,7 +270,7 @@ class Main:
         # best_model_stats = createStats(best_model_losses)
         best_model = self.model.to(self.param.device)
         conf = MyConfusuion(thr=best_threshold).to(device=self.param.device)
-        all_losses = test(best_model, self.test_dataloader, confusion=conf)
+        all_losses, _, _ = test(best_model, self.test_dataloader, confusion=conf)
         confusion_matrix = conf.compute()
         metrics = MetricsParameters()
         metrics.loadFromConfusion(confusion_matrix)

@@ -31,15 +31,12 @@ class GNN_TAM(BaseModel):
     https://doi.org/10.1109/ACCESS.2024.3481331
     """
 
-    def __init__(
-        self, n_gnn: int = 1, gsl_type: str = "relu", alpha: float = 0.1, **kwargs
-    ):
+    def __init__(self, gsl_type: str = "relu", alpha: float = 0.1, **kwargs):
         """
         Args:
             n_nodes (int): The number of nodes/sensors.
             window_size (int): The number of timestamps in one sample.
             n_classes (int): The number of classes.
-            n_gnn (int): The number of GNN modules.
             gsl_type (str): The type of GSL block.
             n_hidden (int): The number of hidden parameters in GCN layers.
             alpha (float): Saturation rate for GSL block.
@@ -53,13 +50,14 @@ class GNN_TAM(BaseModel):
         self.nhidden = self.param.out_layer_inter_dim
         self.device = param.device
         self.idx = torch.arange(self.node_num).to(self.device)
-        self.adj = [0 for i in range(n_gnn)]
-        self.h = [0 for i in range(n_gnn)]
-        self.skip = [0 for i in range(n_gnn)]
+        # n_gnn (int): The number of GNN modules.
+        self.n_gnn = self.param.out_layer_num
+        self.adj = [0 for i in range(self.n_gnn)]
+        self.h = [0 for i in range(self.n_gnn)]
+        self.skip = [0 for i in range(self.n_gnn)]
         self.z = (
             torch.ones(self.node_num, self.node_num) - torch.eye(self.node_num)
         ).to(self.device)
-        self.n_gnn = n_gnn
 
         self.gsl = nn.ModuleList()
         self.conv1 = nn.ModuleList()
@@ -87,7 +85,7 @@ class GNN_TAM(BaseModel):
             )
             self.bnorm2.append(nn.BatchNorm1d(self.node_num))
 
-        self.fc = nn.Linear(n_gnn * self.param.out_layer_inter_dim, self.node_num)
+        self.fc = nn.Linear(self.n_gnn * self.param.out_layer_inter_dim, self.node_num)
 
     def pre_forward(self, X):
         X = X.to(self.device)
@@ -111,7 +109,7 @@ class GNN_TAM(BaseModel):
         return self.adj
 
     def getParmeters():
-        return {"n_gnn": 1, "gsl_type": "relu", "alpha": 0.1}
+        return {"gsl_type": "relu", "alpha": 0.1}
 
 
 class GNN_TAM_RELU(GNN_TAM):

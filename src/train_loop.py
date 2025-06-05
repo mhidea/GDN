@@ -8,7 +8,6 @@ import torch.utils
 from test_loop import *
 import torch.nn.functional as F
 import numpy as np
-from evaluate import createIrqStats
 from torch.utils.data import DataLoader, random_split, Subset
 from scipy.stats import iqr
 import os
@@ -118,7 +117,7 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
                     #     result.loss = (acu_loss) / total_samples
 
                     # return result
-                    all_validation_losses: torch.Tensor = test(
+                    all_validation_losses, _, _ = test(
                         model, val_dataloader, confusion=conf
                     )
                     confusion_matrix = conf.compute()

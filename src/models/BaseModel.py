@@ -105,4 +105,4 @@ class BaseModel(torch.nn.Module):
 
     def loss(self, x, y_truth):
         x = self.forward(x)
-        return torch.nn.functional.l1_loss(x, y_truth, reduction="none")
+        return torch.nn.functional.mse_loss(x, y_truth, reduction="none")

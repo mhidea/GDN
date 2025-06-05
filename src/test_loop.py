@@ -40,6 +40,10 @@ def test(model, dataloader: DataLoader, confusion: MyConfusuion = None):
     all_losses = torch.zeros(
         total_samples, model.node_num, device=param.device, requires_grad=False
     )
+    all_ys = torch.zeros(
+        total_samples, model.node_num, device=param.device, requires_grad=False
+    )
+    all_labels = torch.zeros(total_samples, device=param.device, requires_grad=False)
     acu_loss = 0
 
     t = tqdm.tqdm(dataloader, desc="TESTING ", leave=False, position=1)
@@ -55,6 +59,12 @@ def test(model, dataloader: DataLoader, confusion: MyConfusuion = None):
             all_losses[b * param.batch : b * param.batch + data[0].shape[0], :] = (
                 loss.detach().clone().squeeze(-1)
             )
+            all_ys[b * param.batch : b * param.batch + data[0].shape[0], :] = (
+                data[1].detach().clone().squeeze(-1)
+            )
+            all_labels[b * param.batch : b * param.batch + data[0].shape[0]] = (
+                data[2].detach().clone().squeeze(-1)
+            )
             if confusion is not None:
                 confusion.update(
                     loss,
@@ -62,4 +72,4 @@ def test(model, dataloader: DataLoader, confusion: MyConfusuion = None):
                 )
 
     t.close()
-    return all_losses
+    return all_losses, all_ys, all_labels

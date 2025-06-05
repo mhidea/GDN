@@ -299,6 +299,12 @@ class Params(BaseParameter):
         """
         return self._save_path + "/best.pt"
 
+    def least_train_loss_path(self) -> str:
+        """
+        Gets or sets the file save path.
+        """
+        return self._save_path + "/best_train.pt"
+
     def loss_function(self) -> torch.nn.Module:
         if self.task is Tasks.next_sensors:
             return torch.nn.L1Loss(reduction="none")

@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     # main define task
     param.task = Tasks.next_sensors
-    param.dataset = Datasets.batadal
+    param.dataset = Datasets.batadal_noconst
     param.model = Models.my_mstgat
     param.datasetLoader = DatasetLoader.findModality
     setThreshold(IqrThreshold())
@@ -33,7 +33,6 @@ if __name__ == "__main__":
 
     if param.model == Models.gnn_tam:
         model_parameters = {
-            "n_gnn": [1],
             # "relu", "directed", "unidirected", "undirected", "tanh"
             "gsl_type": ["undirected"],
             "alpha": [0.1],
@@ -48,15 +47,15 @@ if __name__ == "__main__":
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [2],
-        "batch": [16],
-        "window_length": [32],
-        "embedding_dimension": [16],
+        "epoch": [60],
+        "batch": [32],
+        "window_length": [5],
+        "embedding_dimension": [32],
         "topk": [30],
         "out_layer_inter_dim": [32],
-        "out_layer_num": [1, 2, 3],
+        "out_layer_num": [2],
         # use stride for dabase summerizatoion . default = 1 (no summerization)
-        "stride": [30],
+        "stride": [1],
     }
 
     # merge parameters
@@ -93,7 +92,14 @@ if __name__ == "__main__":
             else:
                 model_dict = model_dict | z
         print(param.summary(extra_dict=model_dict))
-        main = Main(param, debug=False, modelParams=model_dict)
+        # adj = torch.zeros((43, 43)).float()
+        # modals = [[6, 25, 26, 27, 28], [0, 7, 8, 9, 10], [3, 19, 20]]
+        # for modal in modals:
+        #     for s1 in modal:
+        #         for s2 in modal:
+        #             adj[s1][s2] = 1
+        adj = None
+        main = Main(param, modelParams=model_dict, adj=adj)
         # main.model = torch.compile(main.model)
         # main.profile()
         # continue
