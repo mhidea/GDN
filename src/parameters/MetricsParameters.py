@@ -11,6 +11,7 @@ class MetricsParameters(BaseParameter):
         FP: float = 0.0,
         TN: float = 0.0,
         FN: float = 0.0,
+        FPR: float = 0.0,
         accuracy: float = 0.0,
         precision: float = 0.0,
         recall: float = 0.0,
@@ -23,6 +24,7 @@ class MetricsParameters(BaseParameter):
         self._FP = FP
         self._TN = TN
         self._FN = FN
+        self._FPR = FPR
         self._accuracy = accuracy
         self._precision = precision
         self._recall = recall
@@ -46,6 +48,15 @@ class MetricsParameters(BaseParameter):
     @FP.setter
     def FP(self, value: float):
         self._FP = value
+
+    @property
+    def FPR(self) -> float:
+        """Gets or sets the FPR."""
+        return self._FPR
+
+    @FPR.setter
+    def FPR(self, value: float):
+        self._FPR = value
 
     @property
     def TN(self) -> float:
@@ -131,3 +142,5 @@ class MetricsParameters(BaseParameter):
 
         # Recall
         self.recall = self.TP / (self.TP + self.FN) if (self.TP + self.FN) != 0 else 0.0
+
+        self.FPR = self.FP / (self.TN + self.FP)
