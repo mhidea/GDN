@@ -31,7 +31,7 @@ class BaseParameter:
         ]
         return {
             a: (
-                getattr(self, a).value
+                getattr(self, a).name
                 if isinstance(getattr(self, a), enum.Enum)
                 else getattr(self, a)
             )

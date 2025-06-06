@@ -1,4 +1,4 @@
-from util.consts import Datasets, Models, Tasks, DatasetLoader
+from util.consts import Datasets, Models, Tasks
 from tabulate import tabulate
 import os
 import torch
@@ -26,8 +26,7 @@ class Params(BaseParameter):
         decay: float = 0.0,
         topk: int = 5,
         model: Models = Models.gdn,
-        task: Tasks = Tasks.next_label,
-        datasetLoader: DatasetLoader = DatasetLoader.findSensorActuator,
+        task: Tasks = Tasks.s_next_l,
         device: str = "cuda",
         lstm_hidden_dim=64,
         lstm_layers_num=1,
@@ -49,7 +48,6 @@ class Params(BaseParameter):
         self._topk = topk
         self._model = model
         self._task = task
-        self._datasetLoader = datasetLoader
         self._device = device
         self._lstm_hidden_dim = lstm_hidden_dim
         self._lstm_layers_num = lstm_layers_num
@@ -250,17 +248,6 @@ class Params(BaseParameter):
         self._model = value
 
     @property
-    def datasetLoader(self) -> DatasetLoader:
-        """
-        Gets or sets the datasetLoader object.
-        """
-        return self._datasetLoader
-
-    @datasetLoader.setter
-    def datasetLoader(self, value: DatasetLoader):
-        self._datasetLoader = value
-
-    @property
     def task(self) -> Tasks:
         """
         Gets or sets the task object.
@@ -290,36 +277,37 @@ class Params(BaseParameter):
         if self.save_path is None:
             _trained = False
         else:
-            _trained = os.path.exists(self.best_path())
+            _trained = os.path.exists(self.best_validationModel_path())
         return _trained
 
-    def best_path(self) -> str:
+    def best_validationModel_path(self) -> str:
         """
         Gets or sets the file save path.
         """
         return self._save_path + "/best.pt"
 
-    def least_train_loss_path(self) -> str:
+    def least_trainLossModel_path(self) -> str:
         """
         Gets or sets the file save path.
         """
         return self._save_path + "/best_train.pt"
 
     def loss_function(self) -> torch.nn.Module:
-        if self.task is Tasks.next_sensors:
+        if self.task is Tasks.s_next_s:
             return torch.nn.L1Loss(reduction="none")
-        if self.task is Tasks.next_label:
+        if self.task is Tasks.s_next_l:
             return torch.nn.BCELoss(reduction="none")
 
     def y_truth_index(self):
 
-        if self.task in [Tasks.next_sensors, Tasks.current_actuators]:
+        if self.task in [Tasks.s_next_s, Tasks.s_current_a]:
             return 1
-        if self.task in [Tasks.next_label, Tasks.current_label]:
+        if self.task in [Tasks.s_next_l, Tasks.s_current_l]:
             return 2
 
     def summary(self, tablefmt: str = "github", extra_dict: dict = None):
-        summary_output = f"### {self.best_path()}\n\n" + super().summary(
-            tablefmt, extra_dict
+        summary_output = (
+            f"### {self.best_validationModel_path()}\n\n"
+            + super().summary(tablefmt, extra_dict)
         )
         return summary_output

@@ -3,27 +3,21 @@ import os
 import pickle
 import random
 import re
-from enum import Enum
-from typing import Any, Dict, Tuple
 
-import numpy as np
 import pandas as pd
 import torch
 from sklearn.preprocessing import MinMaxScaler
 from torch.utils.data import DataLoader, Subset
-
-from datasets.CurrentDataset import CurrentDataset
 
 # Local Imports
 from datasets.TimeDataset import TimeDataset
 from parameters.params import Params
 from test_loop import test
 from train_loop import train
-from util.consts import DatasetLoader, Datasets, Tasks
 from util.env import getSnapShotPath, getWriter
-from util.net_struct import get_feature_map
 from util.preprocess import findSensorActuator
 from evaluate import MyConfusuion, MetricsParameters
+from util.data import sensorGroup_to_xy
 
 # Globals for data caching (consider refactoring later)
 _train_original: pd.DataFrame | None = None
@@ -33,79 +27,53 @@ _columns = None
 
 class Main:
 
-    def __init__(self, param: Params, scale=True, modelParams={}, adj=None):
+    def __init__(self, param: Params, modelParams={}, adj=None):
         self.param = param
         self.modelParams = modelParams
+        self.scaler = MinMaxScaler()
 
-        dataset_name = self.param.dataset.value
         print(f"# DATASET \n\n*{self.param.dataset}*")
-        if param.datasetLoader == DatasetLoader.findModality:
-            train, test, df_adj = self._preapareDF_modal(scale, dataset=dataset_name)
-            if adj is None:
-                adj = df_adj
-            sensors = train.columns
-            actuators = []
-        elif param.datasetLoader == DatasetLoader.findSensorActuator:
-            train, test, (sensors, actuators, consts) = self._prepareDF(
-                scale, dataset=dataset_name
-            )
+        train, test = self._load_param_DF(param)
+        sensors, actuators, consts = findSensorActuator(train)
+        print("#####################################")
+        print("sensors count: ", len(sensors))
+        print("actuators count: ", len(actuators))
+        print("consts count: ", len(consts))
+        print("consts: ", consts)
+        print("#####################################")
+        print(sensors)
+        xlist, ylist, next = sensorGroup_to_xy((sensors, actuators, consts), param.task)
+        if adj is None:
+            adj = self.create_adj(xlist)
 
-        if scale:
-            # Initialize the MinMaxScaler
-            scaler = MinMaxScaler()
+        # if self.param.task in [Tasks.s_next_l, Tasks.s_next_s]:
+        train_dataset = TimeDataset(
+            train,
+            column_groups=(sensors, actuators, consts),
+            mode="train",
+        )
+        test_dataset = TimeDataset(
+            test,
+            column_groups=(sensors, actuators, consts),
+            mode="test",
+        )
+        # elif self.param.task in [Tasks.s_current_l, Tasks.s_current_a]:
+        #     train_dataset = CurrentDataset(
+        #         train,
+        #         sensor_list=sensors,
+        #         actuator_list=actuators,
+        #         mode="train",
+        #     )
+        #     test_dataset = CurrentDataset(
+        #         test,
+        #         sensor_list=sensors,
+        #         actuator_list=actuators,
+        #         mode="test",
+        #     )
+        self.num_test_samples = test_dataset.__len__()
+        self.num_anomalies = test["attack"].sum()
 
-            # Fit the scaler on the first dataset
-            scaler.fit(_train_original[sensors])
-
-            # Transform both datasets using the same scaler
-            _train_original[sensors] = scaler.transform(_train_original[sensors])
-
-            _test_original[sensors] = scaler.transform(_test_original[sensors])
-
-        # feature_map = get_feature_map(dataset_name)
-        # # fc_struc = get_fully_connected_graph_struc(dataset_name)
-
-        # # fc_edge_index = build_loc_net(
-        # #     fc_struc, list(train.columns), feature_map=feature_map
-        # # )
-        # # fc_edge_index = torch.tensor(fc_edge_index, dtype=torch.long)
-
-        # self.feature_map = feature_map
-
-        # train_dataset_indata = construct_data(train, self.feature_map, labels=0)
-        # test_dataset_indata = construct_data(
-        #     test, self.feature_map, labels=test.attack.tolist()
-        # )
-        if self.param.task in [Tasks.next_label, Tasks.next_sensors]:
-            train_dataset = TimeDataset(
-                train,
-                sensor_list=sensors,
-                actuator_list=actuators,
-                mode="train",
-            )
-            test_dataset = TimeDataset(
-                test,
-                sensor_list=sensors,
-                actuator_list=actuators,
-                mode="test",
-            )
-        elif self.param.task in [Tasks.current_label, Tasks.current_actuators]:
-            train_dataset = CurrentDataset(
-                train,
-                sensor_list=sensors,
-                actuator_list=actuators,
-                mode="train",
-            )
-            test_dataset = CurrentDataset(
-                test,
-                sensor_list=sensors,
-                actuator_list=actuators,
-                mode="test",
-            )
-        self.test_samples = test_dataset.__len__()
-        self.anomalies = test["attack"].sum()
-
-        train_dataloader, val_dataloader = self.get_loaders(train_dataset)
+        train_dataloader, val_dataloader = self.train_validation_loaders(train_dataset)
 
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
@@ -120,79 +88,57 @@ class Main:
             # num_workers=4,
         )
         self.model: torch.nn.Module = self.param.model.getClass()(
-            node_num=len(sensors), adj=adj, **modelParams
+            adj=adj, **modelParams
         ).to(self.param.device)
         if self.param.trained():
             print("Model is trained. Loading from file .....")
-            self.model.load_state_dict(
-                torch.load(self.param.best_path(), weights_only=True)
-            )
+            self.load_model(self.param.best_validationModel_path())
         # self.model = torch.compile(self.model, mode="reduce-overhead")
 
-    def load_leastTrain(self):
-        self.model.load_state_dict(
-            torch.load(self.param.least_train_loss_path(), weights_only=True)
-        )
+    def load_model(self, path):
+        self.model.load_state_dict(torch.load(path, weights_only=True))
 
-    def _preapareDF_modal(self, scale, dataset):
-        global _train_original
-        global _test_original
-        global _columns
-        if _train_original is None:
-            _train_original = pd.read_csv(
-                f"./data/{dataset}/train.csv",
-                sep=",",
-                index_col=0,
-            )
-            _test_original = pd.read_csv(
-                f"./data/{dataset}/test.csv",
-                sep=",",
-                index_col=0,
-            )
-
-            # remove white spaces in collumn names
-            columns = {col: col.strip() for col in _train_original.columns}
-            _train_original = _train_original.rename(columns=columns)
-
-            columns = {col: col.strip() for col in _test_original.columns}
-            _test_original = _test_original.rename(columns=columns)
-            # _train_original=_train_original[columns]
-            # _test_original=_test_original[columns]
-
-            for i, col in enumerate(_train_original.columns):
-                print(_train_original.columns[i], _test_original.columns[i])
-                assert _train_original.columns[i] == _test_original.columns[i]
-        stripped_columns = [re.sub(r"\d+", "", s) for s in _train_original.columns]
+    def create_adj(self, columns: list):
+        stripped_columns = [re.sub(r"\d+", "", s) for s in columns]
         adj = torch.zeros(len(stripped_columns), len(stripped_columns))
         for i in range(len(stripped_columns)):
             for j in range(len(stripped_columns)):
                 if stripped_columns[i] == stripped_columns[j]:
                     adj[i][j] = 1
-        return _train_original, _test_original, adj
+        return adj
 
-    def _prepareDF(self, scale, dataset):
+    def _load_param_DF(self, param: Params):
         global _train_original
         global _test_original
         global _columns
         if _train_original is None:
             _train_original = pd.read_csv(
-                f"./data/{dataset}/train.csv", sep=",", index_col=0
+                f"./data/{param.dataset.value}/train.csv", sep=",", index_col=0
             )
             _test_original = pd.read_csv(
-                f"./data/{dataset}/test.csv", sep=",", index_col=0
+                f"./data/{param.dataset.value}/test.csv", sep=",", index_col=0
             )
-            _columns = findSensorActuator(_train_original)
-            sensors, actuators, consts = _columns
-            print("#####################################")
-            print("sensors count: ", len(sensors))
-            print("actuators count: ", len(actuators))
-            print("consts count: ", len(consts))
-            print("consts: ", consts)
-            print("#####################################")
-            print(sensors)
-            # if "attack" in _train_original.columns:
-            #     _train_original = _train_original.drop(columns=["attack"])
-        return _train_original, _test_original, _columns
+            columns = {col: col.strip() for col in _train_original.columns}
+            _train_original = _train_original.rename(columns=columns)
+
+            columns = {col: col.strip() for col in _test_original.columns}
+            _test_original = _test_original.rename(columns=columns)
+            for i, col in enumerate(_train_original.columns):
+                # print(_train_original.columns[i], _test_original.columns[i])
+                assert _train_original.columns[i] == _test_original.columns[i]
+            print(" - ".join(_train_original.columns))
+            # Fit the scaler on the first dataset
+            self.scaler.fit(_train_original)
+
+            # Transform both datasets using the same scaler
+            _train_original[_train_original.columns] = self.scaler.transform(
+                _train_original[_train_original.columns]
+            )
+
+            _test_original[_train_original.columns] = self.scaler.transform(
+                _test_original[_train_original.columns]
+            )
+        return _train_original, _test_original
 
     def profile(self):
         print(f"Profiling the device {self.param.device}")
@@ -239,7 +185,9 @@ class Main:
                 prof.step()
 
     def _loadBestModel(self):
-        self.model.load_state_dict(torch.load(open(self.param.best_path(), "rb")))
+        self.model.load_state_dict(
+            torch.load(open(self.param.best_validationModel_path(), "rb"))
+        )
 
     def run(self, step: int = 0):
         wasnt_trained = False
@@ -257,10 +205,12 @@ class Main:
         else:
             print("Model already trained. Loading from saved file.")
             self.model.load_state_dict(
-                torch.load(self.param.best_path(), weights_only=True)
+                torch.load(self.param.best_validationModel_path(), weights_only=True)
             )
             best_threshold = torch.load(
-                self.param.best_path().replace("best.pt", "least_loss_threshold.pt"),
+                self.param.best_validationModel_path().replace(
+                    "best.pt", "least_loss_threshold.pt"
+                ),
             )
 
         # Test the best model
@@ -277,7 +227,7 @@ class Main:
         metrics.loss = all_losses.sum(-1).mean()
         print("scores")
         print(
-            f"Total test dataset samples: {self.test_samples} . Total anomalies (label=1) : {self.anomalies} "
+            f"Total test dataset samples: {self.num_test_samples} . Total anomalies (label=1) : {self.num_anomalies} "
         )
 
         print(metrics.summary())
@@ -309,7 +259,7 @@ class Main:
 
         return metrics
 
-    def get_loaders(self, train_dataset):
+    def train_validation_loaders(self, train_dataset):
         dataset_len = int(len(train_dataset))
         train_use_len = int(dataset_len * (1 - self.param.val_ratio))
         val_use_len = int(dataset_len * self.param.val_ratio)

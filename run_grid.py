@@ -1,5 +1,5 @@
 from tkinter.dnd import dnd_start
-from main import Main, DatasetLoader
+from main import Main
 from util.consts import *
 from util.env import *
 import itertools
@@ -14,12 +14,12 @@ if __name__ == "__main__":
     param = Params()
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     set_param(param)
+    param.save_path = "./snapshot/my_mstgat_swat_noconst/25_06_05_11_44_56/0"
 
     # main define task
-    param.task = Tasks.next_sensors
-    param.dataset = Datasets.batadal_noconst
+    param.task = Tasks.sa_next_sa
+    param.dataset = Datasets.batadal
     param.model = Models.my_mstgat
-    param.datasetLoader = DatasetLoader.findModality
     setThreshold(IqrThreshold())
     createPaths(param.model, param.dataset)
 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
     print("#### Default model extra parameters : \n", model_parameters)
 
     # params per specific task
-    if param.task in [Tasks.current_label]:
+    if param.task in [Tasks.s_current_l]:
         param.window_length = 1
 
     if param.model == Models.gnn_tam:
@@ -81,6 +81,24 @@ if __name__ == "__main__":
     getWriter().add_text(tag="Grid", text_string=grid_strig, global_step=0)
 
     param_keies = param.toDict().keys()
+
+    adj = None
+    # modals = [[6, 25, 26, 27, 28], [0, 7, 8, 9, 10], [3, 19, 20]]
+    count = 36
+    adj = torch.zeros((count, count)).float()
+    modals = [[6, 18, 19, 20, 21], [0, 7, 8, 9], [3, 14, 15]]
+
+    # # Flatten the list
+    # excluded_numbers = set(num for sublist in modals for num in sublist)
+    # # Generate the desired array
+    # all_rest = [num for num in range(count) if num not in excluded_numbers]
+    # modals.append(all_rest)
+
+    for modal in modals:
+        for s1 in modal:
+            for s2 in modal:
+                adj[s1][s2] = 1
+
     for i, (x) in enumerate(itertools.product(*_g)):
         setTag(i)
         param.save_path = getSnapShotPath()
@@ -92,13 +110,7 @@ if __name__ == "__main__":
             else:
                 model_dict = model_dict | z
         print(param.summary(extra_dict=model_dict))
-        # adj = torch.zeros((43, 43)).float()
-        # modals = [[6, 25, 26, 27, 28], [0, 7, 8, 9, 10], [3, 19, 20]]
-        # for modal in modals:
-        #     for s1 in modal:
-        #         for s2 in modal:
-        #             adj[s1][s2] = 1
-        adj = None
+
         main = Main(param, modelParams=model_dict, adj=adj)
         # main.model = torch.compile(main.model)
         # main.profile()

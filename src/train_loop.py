@@ -66,20 +66,17 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
         avg_loss = 0
         train_all_losses = torch.zeros(
             dataloader.dataset.__len__(),
-            1 if param.task in [Tasks.current_label] else model.node_num,
+            1 if param.task in [Tasks.s_current_l] else model.node_num,
             device=param.device,
             requires_grad=False,
         )
         # data = (windowed_x, y, next_label)
-        for b, data in enumerate(t):
+        for b, (x, y, labels) in enumerate(t):
             train_iterations -= 1
-            batch = data[0].shape[0]
+            batch = x.shape[0]
             trained_samples += batch
 
-            loss: torch.Tensor = model.loss(
-                data[0],
-                data[y_truth_index],
-            )
+            loss: torch.Tensor = model.loss(x, y)
 
             train_all_losses[trained_samples - batch : trained_samples, :] = (
                 loss.narrow_copy(0, 0, batch).squeeze(-1)
@@ -164,12 +161,14 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
                     if acu_loss < min_train_loss:
                         torch.save(
                             model.state_dict(),
-                            param.best_path().replace("best.pt", "best_train.pt"),
+                            param.best_validationModel_path().replace(
+                                "best.pt", "best_train.pt"
+                            ),
                         )
                         min_train_loss = acu_loss
                         torch.save(
                             thr,
-                            param.best_path().replace(
+                            param.best_validationModel_path().replace(
                                 "best.pt", "least_loss_threshold.pt"
                             ),
                         )
@@ -177,10 +176,12 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
 
                     # Save the model with the least loss on validation data
                     if val_loss < min_validation_loss:
-                        torch.save(model.state_dict(), param.best_path())
+                        torch.save(
+                            model.state_dict(), param.best_validationModel_path()
+                        )
                         torch.save(
                             thr,
-                            param.best_path().replace(
+                            param.best_validationModel_path().replace(
                                 "best.pt", "least_val_loss_threshold.pt"
                             ),
                         )
@@ -195,7 +196,9 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
 
                 else:
                     if acu_loss < min_validation_loss:
-                        torch.save(model.state_dict(), param.best_path())
+                        torch.save(
+                            model.state_dict(), param.best_validationModel_path()
+                        )
                         min_validation_loss = acu_loss
                 t.close()
     return best_train_threshold

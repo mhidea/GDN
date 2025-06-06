@@ -42,6 +42,7 @@ class CurrentLabelDataset(Dataset):
 
 
 class CurrentDataset(Dataset):
+
     def __init__(
         self,
         data_frame: pd.DataFrame,

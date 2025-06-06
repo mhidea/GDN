@@ -50,26 +50,20 @@ def test(model, dataloader: DataLoader, confusion: MyConfusuion = None):
     y_truth_index = param.y_truth_index()
     with torch.no_grad():
         # data = (windowed_x, y, labels)
-        for b, data in enumerate(t):
-            loss: torch.Tensor = model.loss(
-                data[0],
-                data[y_truth_index],
-            )
-
-            all_losses[b * param.batch : b * param.batch + data[0].shape[0], :] = (
+        for b, (x, y, label) in enumerate(t):
+            loss: torch.Tensor = model.loss(x, y)
+            batch = x.shape[0]
+            all_losses[b * param.batch : b * param.batch + batch, :] = (
                 loss.detach().clone().squeeze(-1)
             )
-            all_ys[b * param.batch : b * param.batch + data[0].shape[0], :] = (
-                data[1].detach().clone().squeeze(-1)
+            all_ys[b * param.batch : b * param.batch + batch, :] = (
+                y.detach().clone().squeeze(-1)
             )
-            all_labels[b * param.batch : b * param.batch + data[0].shape[0]] = (
-                data[2].detach().clone().squeeze(-1)
+            all_labels[b * param.batch : b * param.batch + batch] = (
+                label.detach().clone().squeeze(-1)
             )
             if confusion is not None:
-                confusion.update(
-                    loss,
-                    data[2].squeeze(-1),
-                )
+                confusion.update(loss, label.squeeze(-1))
 
     t.close()
     return all_losses, all_ys, all_labels

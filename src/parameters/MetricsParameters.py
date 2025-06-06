@@ -143,4 +143,4 @@ class MetricsParameters(BaseParameter):
         # Recall
         self.recall = self.TP / (self.TP + self.FN) if (self.TP + self.FN) != 0 else 0.0
 
-        self.FPR = self.FP / (self.TN + self.FP)
+        self.FPR = self.FP / (self.TN + self.FP) if (self.TN + self.FP) != 0 else 0.0

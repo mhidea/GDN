@@ -21,7 +21,7 @@ param.topk = 15
 kernel_size = 16
 gamma1 = 0.5
 gamma2 = 0.8
-param.task = Tasks.next_sensors
+param.task = Tasks.s_next_s
 param.dataset = Datasets.batadal
 set_param(param)
 

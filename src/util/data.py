@@ -6,6 +6,49 @@ import numpy as np
 from numpy import percentile
 import pandas as pd
 import os
+from util.consts import Tasks
+
+
+def sensorGroup_to_xy(sensor_group: tuple, task: Tasks) -> tuple:
+    """Based on task returns which column names are needed for
+        x (input)
+        y (output)
+        next (if we should user next values for y).
+        if y ==[] , we should use labels for y which is usually attack column.
+
+    Args:
+        sensor_group (tuple): given by findSensorActuator method
+        task (Tasks): _description_
+
+    Returns:
+        tuple: (x: List ,y: List , next: boolean)
+    """
+    sensors, actuators, consts = sensor_group
+    x_string, task_string, y_string = task.name.split("_")
+    xlist = []
+    ylist = []
+    next = task_string == "next"
+    if x_string == "all":
+        xlist = sensors + actuators + consts
+    else:
+        if "s" in x_string:
+            xlist += sensors
+        if "a" in x_string:
+            xlist += actuators
+        if "c" in x_string:
+            xlist += consts
+
+    if y_string == "all":
+        ylist = sensors + actuators + consts
+    else:
+        if "s" in y_string:
+            ylist += sensors
+        if "a" in y_string:
+            ylist += actuators
+        if "c" in y_string:
+            ylist += consts
+
+    return (xlist, ylist, next)
 
 
 def get_attack_interval(attack):
@@ -201,3 +244,9 @@ def createDummyDataset(samples: int, coulmns=3):
     # Save the DataFrame to a CSV file
     df_train.to_csv(f"{csv_folder}/train.csv", index=False)
     df_test.to_csv(f"{csv_folder}/test.csv", index=False)
+
+
+if __name__ == "__main__":
+    sg = (["s1", "s2", "s3", "s4"], ["a1", "a2", "a3"], ["c1", "c2", "c3"])
+    l = sensorGroup_to_xy(sg, Tasks.sc_next_s)
+    print(l)

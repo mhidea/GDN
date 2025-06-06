@@ -4,6 +4,7 @@ from util.env import get_param
 import warnings
 from torch_geometric.nn.inits import glorot, zeros
 import math
+from datasets.TimeDataset import getDimensions
 
 
 class GraphLearner(torch.nn.Module):
@@ -49,14 +50,17 @@ class GraphLearner(torch.nn.Module):
 class BaseModel(torch.nn.Module):
     """docstring for BaseModel."""
 
-    def __init__(self, node_num, adj=None, **kwargs):
+    def __init__(self, adj=None, **kwargs):
         super(BaseModel, self).__init__()
         self.param = get_param()
-        self.node_num = node_num
+        xDim, yDim = getDimensions()
+        assert xDim, yDim
+        self.node_num = xDim
+        self.out_num = yDim
         self.adj = adj
 
         self.task = self.param.task
-        if self.task in [Tasks.next_label, Tasks.current_label]:
+        if self.task in [Tasks.s_next_l, Tasks.s_current_l]:
             self.nodes_to_label = torch.nn.Linear(self.node_num, 1)
 
     def pre_forward(self, data: torch.Tensor) -> torch.Tensor:
@@ -94,11 +98,9 @@ class BaseModel(torch.nn.Module):
         assert out.shape[-2] == self.node_num
         # Out shape is (batch,nodes=sensors,windows)
 
-        if self.task in [Tasks.next_sensors, Tasks.current_actuators]:
-            out = out.squeeze(-1)
-        elif self.task in [Tasks.next_label, Tasks.current_label]:
+        out = out.squeeze(-1)
+        if "l" in self.task.name.split("_")[2]:
             # TODO: 25/04/04 17:30:49 maybe replace with mean(-1)
-            out = out.squeeze(-1)
             out = self.nodes_to_label(out)
             out = torch.nn.functional.sigmoid(out)
         return out

@@ -125,7 +125,7 @@ def build_loc_net(struc: dict, all_features: list, feature_map=[]) -> list:
 
 def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
     actuators = []
-    consts = {}
+    consts = []
     sensors = []
     columns = [
         col for col in dataFrame.columns if col.strip() not in ["datetime", "Timestamp"]
@@ -138,8 +138,8 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
             elif l not in ignor_labels:
                 actuators.append(col)
         elif l == 1:
-            # print("const: ", col, " = ", dataFrame.iloc[0][col])
-            consts[col] = dataFrame.iloc[0][col]
+            print("const: ", col, " = ", dataFrame.iloc[0][col])
+            consts.append(col)  # [col] = dataFrame.iloc[0][col]
         else:
             sensors.append(col)
     return sensors, actuators, consts

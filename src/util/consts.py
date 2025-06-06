@@ -15,10 +15,29 @@ class Datasets(Enum):
 
 
 class Tasks(Enum):
-    next_label = 1
-    next_sensors = 2
-    current_label = 3
-    current_actuators = 4
+    """Defines which columns are for input and which is for prediction.
+
+    s = sensors
+    a = actuators
+    c = constants
+    l = labels
+    all = sensors + actuators + constants
+    next = next
+    current = current
+
+    Args:
+        Enum (_type_): _description_
+    """
+
+    s_next_l = 1
+    s_next_s = 2
+    s_current_l = 3
+    s_current_a = 4
+    all_next_l = 5
+    sc_next_s = 6
+    sa_next_s = 7
+    sa_next_sa = 8
+    all_next_all = 9
 
 
 class Models(Enum):
@@ -47,9 +66,3 @@ class Models(Enum):
 
         # Get the class from the module
         return getattr(module, class_name)
-
-
-class DatasetLoader(Enum):
-    findSensorActuator = 1
-    findModality = 2
-    noFindSensorActuator = 3
