@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [60],
+        "epoch": [30],
         "batch": [32],
         "window_length": [5],
         "embedding_dimension": [32],
@@ -83,21 +83,25 @@ if __name__ == "__main__":
     param_keies = param.toDict().keys()
 
     adj = None
-    # modals = [[6, 25, 26, 27, 28], [0, 7, 8, 9, 10], [3, 19, 20]]
-    count = 36
-    adj = torch.zeros((count, count)).float()
-    modals = [[6, 18, 19, 20, 21], [0, 7, 8, 9], [3, 14, 15]]
+    if param.dataset == Datasets.batadal:
+        if param.task == Tasks.all_next_all:
+            count = 43
+            modals = [[6, 13, 14, 33, 34], [0, 7, 8, 28, 36], [3, 11, 31]]
+            adj = torch.zeros((count, count)).float()
+        elif param.task == Tasks.sa_next_sa:
+            count = 36
+            modals = [
+                [6, 13, 14, 33, 34],
+                [0, 7, 8, 28],
+                [3, 11, 31],
+            ]
+            adj = torch.zeros((count, count)).float()
 
-    # # Flatten the list
-    # excluded_numbers = set(num for sublist in modals for num in sublist)
-    # # Generate the desired array
-    # all_rest = [num for num in range(count) if num not in excluded_numbers]
-    # modals.append(all_rest)
-
-    for modal in modals:
-        for s1 in modal:
-            for s2 in modal:
-                adj[s1][s2] = 1
+    if adj is not None:
+        for modal in modals:
+            for s1 in modal:
+                for s2 in modal:
+                    adj[s1][s2] = 1
 
     for i, (x) in enumerate(itertools.product(*_g)):
         setTag(i)

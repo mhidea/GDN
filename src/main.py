@@ -41,10 +41,21 @@ class Main:
         print("consts count: ", len(consts))
         print("consts: ", consts)
         print("#####################################")
-        print(sensors)
         xlist, ylist, next = sensorGroup_to_xy((sensors, actuators, consts), param.task)
+        print("#####################################")
+        print(f"xlist ({len(xlist)}):")
+        print(xlist)
+        print("#####################################")
+
         if adj is None:
             adj = self.create_adj(xlist)
+
+        if not param.trained():
+            print("Saving adj")
+            torch.save(
+                adj,
+                param.best_validationModel_path().replace("best.pt", "adj.pt"),
+            )
 
         # if self.param.task in [Tasks.s_next_l, Tasks.s_next_s]:
         train_dataset = TimeDataset(
@@ -126,7 +137,7 @@ class Main:
             for i, col in enumerate(_train_original.columns):
                 # print(_train_original.columns[i], _test_original.columns[i])
                 assert _train_original.columns[i] == _test_original.columns[i]
-            print(" - ".join(_train_original.columns))
+            # print(" - ".join(_train_original.columns))
             # Fit the scaler on the first dataset
             self.scaler.fit(_train_original)
 
@@ -193,6 +204,12 @@ class Main:
         wasnt_trained = False
         best_threshold = None
         if not self.param.trained():
+            with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
+                # Serialize and save the object to the file
+                pickle.dump(self.param, file)
+            with open(f"{getSnapShotPath()}/model_parameters.pickle", "wb") as file:
+                # Serialize and save the object to the file
+                pickle.dump(self.modelParams, file)
             wasnt_trained = True
             print("###############################")
             print("Model Not Found. Training new model.")
@@ -239,12 +256,6 @@ class Main:
                 metric_dict=metrics.toDict(),
                 # global_step=i,
             )
-            with open(f"{getSnapShotPath()}/param.pickle", "wb") as file:
-                # Serialize and save the object to the file
-                pickle.dump(self.param, file)
-            with open(f"{getSnapShotPath()}/model_parameters.pickle", "wb") as file:
-                # Serialize and save the object to the file
-                pickle.dump(self.modelParams, file)
             getWriter().add_text(
                 "summary",
                 best_threshold.summary()
