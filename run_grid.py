@@ -17,7 +17,7 @@ if __name__ == "__main__":
     param.save_path = "./snapshot/my_mstgat_swat_noconst/25_06_05_11_44_56/0"
 
     # main define task
-    param.task = Tasks.sa_next_sa
+    param.task = Tasks.s_next_s
     param.dataset = Datasets.batadal
     param.model = Models.my_mstgat
     setThreshold(IqrThreshold())
@@ -47,11 +47,11 @@ if __name__ == "__main__":
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [30],
+        "epoch": [90],
         "batch": [32],
         "window_length": [5],
         "embedding_dimension": [32],
-        "topk": [30],
+        "topk": [25],
         "out_layer_inter_dim": [32],
         "out_layer_num": [2],
         # use stride for dabase summerizatoion . default = 1 (no summerization)
@@ -84,24 +84,31 @@ if __name__ == "__main__":
 
     adj = None
     if param.dataset == Datasets.batadal:
-        if param.task == Tasks.all_next_all:
-            count = 43
-            modals = [[6, 13, 14, 33, 34], [0, 7, 8, 28, 36], [3, 11, 31]]
-            adj = torch.zeros((count, count)).float()
-        elif param.task == Tasks.sa_next_sa:
-            count = 36
-            modals = [
-                [6, 13, 14, 33, 34],
-                [0, 7, 8, 28],
-                [3, 11, 31],
-            ]
-            adj = torch.zeros((count, count)).float()
-
-    if adj is not None:
+        count = 43
+        modals = [[6, 13, 14, 33, 34], [0, 7, 8, 28, 36], [3, 11, 31]]
+        adj = torch.zeros((count, count)).float()
+        excluded_numbers = set(num for sublist in modals for num in sublist)
+        # Generate the desired array
+        all_rest = [num for num in range(count) if num not in excluded_numbers]
+        modals.append(all_rest)
         for modal in modals:
             for s1 in modal:
                 for s2 in modal:
                     adj[s1][s2] = 1
+        if param.task == Tasks.all_next_all:
+            pass
+        elif param.task == Tasks.sa_next_sa:
+            count = 36
+            # modals = [
+            #     [6, 13, 14, 33, 34],
+            #     [0, 7, 8, 28],
+            #     [3, 11, 31],
+            # ]
+            adj = adj[:36, :36]
+        elif param.task == Tasks.s_next_s:
+            adj = adj[:28, :28]
+
+    # if adj is not None:
 
     for i, (x) in enumerate(itertools.product(*_g)):
         setTag(i)
