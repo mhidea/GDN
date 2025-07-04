@@ -4,11 +4,7 @@ import importlib
 
 class Datasets(Enum):
     swat = "swat"
-    swat_noconst = "swat_noconst"
-    swat_filtered = "swat_filtered"
-    batadal_noconst = "batadal_noconst"
     batadal = "batadal"
-    batadal_filtered = "batadal_filtered"
     msl = "msl"
     wadi = "wadi"
     dummy = "dummy"
