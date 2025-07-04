@@ -99,7 +99,7 @@ class BaseModel(torch.nn.Module):
         # Out shape is (batch,nodes=sensors,windows)
 
         out = out.squeeze(-1)
-        if "l" in self.task.name.split("_")[2]:
+        if self.task in [Tasks.s_next_l, Tasks.s_current_l]:
             # TODO: 25/04/04 17:30:49 maybe replace with mean(-1)
             out = self.nodes_to_label(out)
             out = torch.nn.functional.sigmoid(out)

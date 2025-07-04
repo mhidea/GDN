@@ -24,12 +24,13 @@ def sensorGroup_to_xy(sensor_group: tuple, task: Tasks) -> tuple:
         tuple: (x: List ,y: List , next: boolean)
     """
     sensors, actuators, consts = sensor_group
+    attack = ["attack"]
     x_string, task_string, y_string = task.name.split("_")
     xlist = []
     ylist = []
     next = task_string == "next"
-    if x_string == "all":
-        xlist = sensors + actuators + consts
+    if x_string == "sacl":
+        xlist = sensors + actuators + consts + attack
     else:
         if "s" in x_string:
             xlist += sensors
@@ -37,6 +38,8 @@ def sensorGroup_to_xy(sensor_group: tuple, task: Tasks) -> tuple:
             xlist += actuators
         if "c" in x_string:
             xlist += consts
+        if "l" in x_string:
+            xlist += attack
 
     if y_string == "all":
         ylist = sensors + actuators + consts
@@ -47,7 +50,8 @@ def sensorGroup_to_xy(sensor_group: tuple, task: Tasks) -> tuple:
             ylist += actuators
         if "c" in y_string:
             ylist += consts
-
+        if "l" in y_string:
+            ylist += attack
     return (xlist, ylist, next)
 
 

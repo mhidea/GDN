@@ -128,7 +128,9 @@ def findSensorActuator(dataFrame: pd.DataFrame, ignor_labels: list = None):
     consts = []
     sensors = []
     columns = [
-        col for col in dataFrame.columns if col.strip() not in ["datetime", "Timestamp"]
+        col
+        for col in dataFrame.columns
+        if col.strip() not in ["datetime", "Timestamp", "attack"]
     ]
     for col in columns:
         l = len(dataFrame[col].unique())

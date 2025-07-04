@@ -129,9 +129,9 @@ class MetricsParameters(BaseParameter):
 
     def loadFromConfusion(self, metrics_tensor):
         self.TP = metrics_tensor[1][1].item()
-        self.FP = metrics_tensor[1][0].item()
+        self.FN = metrics_tensor[1][0].item()
         self.TN = metrics_tensor[0][0].item()
-        self.FN = metrics_tensor[0][1].item()
+        self.FP = metrics_tensor[0][1].item()
         # Accuracy
         self.accuracy = (self.TP + self.TN) / metrics_tensor.sum().item()
 

@@ -11,8 +11,9 @@ from torchmetrics.classification import BinaryConfusionMatrix
 class BaseThreshold:
     """docstring for BaseThreshold."""
 
-    def __init__(self):
+    def __init__(self, multiplier=1.0):
         super(BaseThreshold, self).__init__()
+        self.multiplier = multiplier
 
     def fit(self, loss: torch.Tensor):
         pass
@@ -27,14 +28,14 @@ class BaseThreshold:
         pass
 
     def summary(self):
-        return "This is the best class for defining threshold for classification."
+        return f"{self.__class__.__name__ } multiplier: {self.multiplier}"
 
 
 class IqrSensorThreshold(BaseThreshold):
     """docstring for IqrThreshold."""
 
-    def __init__(self):
-        super(IqrSensorThreshold, self).__init__()
+    def __init__(self, **kwargs):
+        super(IqrSensorThreshold, self).__init__(**kwargs)
         self.q = None
         self.medians = None
         self.threshold = None
@@ -52,7 +53,7 @@ class IqrSensorThreshold(BaseThreshold):
         with torch.no_grad():
             predicted_labels = (loss - self.medians).abs() / self.q
             preds = torch.where(
-                predicted_labels > self.threshold,
+                predicted_labels > (self.threshold * self.multiplier),
                 1,
                 0,
             ).sum(-1)
@@ -63,18 +64,14 @@ class IqrSensorThreshold(BaseThreshold):
             )
         return preds
 
-    def summary(self):
-        return "IqrThreshold:\n\n" + self.stats.summary()
-
 
 class ZscoreThreshold(BaseThreshold):
     """docstring for MinMaxThreshold."""
 
-    def __init__(self, threshold=1.0):
-        super(ZscoreThreshold, self).__init__()
+    def __init__(self, **kwargs):
+        super(ZscoreThreshold, self).__init__(**kwargs)
         self.mean = None
         self.std = None
-        self.threshold = threshold
 
     def fit(self, losses: torch.Tensor):
 
@@ -85,7 +82,7 @@ class ZscoreThreshold(BaseThreshold):
         with torch.no_grad():
 
             preds = (
-                (((loss - self.mean) / self.std).abs() > self.threshold).int().sum(-1)
+                (((loss - self.mean) / self.std).abs() > self.multiplier).int().sum(-1)
             )
             preds = torch.where(
                 preds > 0,
@@ -98,10 +95,9 @@ class ZscoreThreshold(BaseThreshold):
 class AbsMaxThreshold(BaseThreshold):
     """docstring for MinMaxThreshold."""
 
-    def __init__(self, multiplier=1.0):
-        super(AbsMaxThreshold, self).__init__()
+    def __init__(self, **kwargs):
+        super(AbsMaxThreshold, self).__init__(**kwargs)
         self.max = None
-        self.multiplier = multiplier
 
     def fit(self, losses: torch.Tensor):
 
@@ -122,11 +118,10 @@ class AbsMaxThreshold(BaseThreshold):
 class MinMaxThreshold(BaseThreshold):
     """docstring for MinMaxThreshold."""
 
-    def __init__(self, multiplier=1.0):
-        super(MinMaxThreshold, self).__init__()
+    def __init__(self, **kwargs):
+        super(MinMaxThreshold, self).__init__(**kwargs)
         self.min = None
         self.max = None
-        self.multiplier = multiplier
 
     def fit(self, losses: torch.Tensor):
 
@@ -161,21 +156,21 @@ class IqrThreshold(BaseThreshold):
                 ((loss - self.stats.medians).abs() / self.stats.iqr).max(-1).values
             )
             preds = torch.where(
-                predicted_labels > self.stats.threshold,
+                predicted_labels > (self.stats.threshold * self.multiplier),
                 1,
                 0,
             )
         return preds
 
-    def summary(self):
-        return "IqrThreshold:\n\n" + self.stats.summary()
+    # def summary(self):
+    #     return "IqrThreshold:\n\n" + self.stats.summary()
 
 
 class MaxLossThreshold(BaseThreshold):
     """docstring for MaxLossThreshold."""
 
-    def __init__(self):
-        super(MaxLossThreshold, self).__init__()
+    def __init__(self, **kwargs):
+        super(MaxLossThreshold, self).__init__(**kwargs)
         self.max = 0.0
 
     def fit(self, losses: torch.Tensor):

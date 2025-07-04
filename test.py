@@ -1,31 +1,53 @@
-from main import Main, DatasetLoader
-from parameters.params import Params
-from util.consts import Datasets, Models
+# %%
+import pickle
+from parameters.params import Params, Datasets, Models, Tasks
 from util.env import set_param
-import numpy as np
+from main import Main
+import torch
+from models.mine.MSTGAT import MSTGAT
+from test_loop import test
+from train_loop import train
 import pandas as pd
-from util.consts import Tasks
-from datasets.TimeDataset import TimeDataset
-from util.preprocess import findSensorActuator
-from parameters.params import Params
-from util.env import set_param
+from evaluate import (
+    IqrThreshold,
+    MyConfusuion,
+    IqrSensorThreshold,
+    MinMaxThreshold,
+    ZscoreThreshold,
+)
+import scipy.optimize as opt
 
-rows = 10
-s = {
-    "s1": np.arange(0, rows, 1),
-    "s2": np.random.randn(rows),
-    "s3": np.random.randn(rows),
-}
+# %%
+path = "./snapshot/my_mstgat_batadal/25_06_16_10_06_41/0/"
 
-a = {"a1": np.random.randint(0, 2, (rows,)), "a2": np.random.randint(0, 2, (rows,))}
-c = {"c1": np.zeros(rows), "c2": np.zeros(rows) + 3}
-
-df = pd.DataFrame(s | a | c)
-sg = findSensorActuator(df)
-print(sg)
-param = Params(window_length=2, stride=1, task=Tasks.s_current_a)
+param: Params = pickle.load(file=open(f"{path}param.pickle", "rb"))
+param.val_ratio = 0
 set_param(param)
-ds = TimeDataset(df, sg)
-print(ds.__getitem__(0))
+model_parameters = pickle.load(file=open(f"{path}model_parameters.pickle", "rb"))
+adj = torch.load(param.best_validationModel_path().replace("best.pt", "adj.pt"))
 
-print(param.summary())
+
+# %%
+main = Main(param=param, modelParams=model_parameters, adj=adj)
+
+# # main.load_model(path=param.least_trainLossModel_path())
+
+# # %%
+# print(len(main.train_dataloader),len(main.val_dataloader),len(main.test_dataloader))
+
+# # %% [markdown]
+# # ## Train losses
+# # get all losses from train data loader
+
+# # %%
+# train_all_loss,y_train,label_train = test(main.model,main.train_dataloader,None)
+
+# # %%
+# print(train_all_loss.shape)
+# print(label_train.sum())
+
+# # %% [markdown]
+# # ## Test losses
+
+# # %%
+# test_all_losses,ys,lbls = test(main.model, main.test_dataloader,confusion=None)

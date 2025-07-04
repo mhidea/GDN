@@ -25,7 +25,7 @@ class Params(BaseParameter):
         learning_rate: float = 0.001,
         decay: float = 0.0,
         topk: int = 5,
-        model: Models = Models.gdn,
+        model: Models = Models.gdn_fullyconnected,
         task: Tasks = Tasks.s_next_l,
         device: str = "cuda",
         lstm_hidden_dim=64,

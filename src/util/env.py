@@ -13,6 +13,17 @@ _writer: SummaryWriter = None
 _run_time = None
 _tag_suffix = None
 _threshold: BaseThreshold = None
+_train_with_test = False
+
+
+def setTrain_with_test(cond):
+    global _train_with_test
+    _train_with_test = cond
+
+
+def getTrain_with_test() -> bool:
+    global _train_with_test
+    return _train_with_test
 
 
 def setThreshold(thr: BaseThreshold):

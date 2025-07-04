@@ -27,7 +27,12 @@ from evaluate import MyConfusuion
 filter_keis = ["TP", "FP", "TN", "FN"]
 
 
-def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
+def train(
+    model: BaseModel = None,
+    train_dataloader=None,
+    val_dataloader=None,
+    test_dataloader=None,
+):
     param = get_param()
     seed = param.random_seed
 
@@ -104,50 +109,18 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
 
                 # Compute the statistics of train losses so that evalution can do the classification
                 thr = getThreshold()
+
                 thr.fit(train_all_losses)
 
                 if val_dataloader is not None:
-                    conf = MyConfusuion(thr=thr).to(param.device)
                     #     conf = bs.compute()
                     #     result = MetricsParameters()
                     #     result.loadFromConfusion(conf)
                     #     result.loss = (acu_loss) / total_samples
 
                     # return result
-                    all_validation_losses, _, _ = test(
-                        model, val_dataloader, confusion=conf
-                    )
-                    confusion_matrix = conf.compute()
-                    metrics = MetricsParameters()
-                    metrics.loadFromConfusion(confusion_matrix)
-                    metrics.loss = all_validation_losses.sum(-1).mean()
-                    val_loss = metrics.loss
-                    t.set_postfix(
-                        {
-                            "Aculoss": (acu_loss / trained_samples),
-                            "val_loss": val_loss,
-                        }
-                    )
-
-                    confusion_metrics = {
-                        key: metrics.toDict()[key] for key in filter_keis
-                    }
-                    _m = metrics.toDict()
-                    performance_metrics_dict = {
-                        key: _m[key] for key in _m.keys() if key not in filter_keis
-                    }
-
-                    # Save the metrics per epoch in tensorboard
-                    getWriter().add_scalars(
-                        main_tag=getTag("val_confusion/epoch_"),
-                        global_step=i_epoch,
-                        tag_scalar_dict=confusion_metrics,
-                    )
-                    getWriter().add_scalars(
-                        main_tag=getTag("val_metrics/epoch_"),
-                        global_step=i_epoch,
-                        tag_scalar_dict=performance_metrics_dict,
-                    )
+                    all_validation_losses, _, _ = test(model, val_dataloader)
+                    val_loss = all_validation_losses.sum(-1).mean().cpu().numpy()
                     getWriter().add_scalars(
                         main_tag=getTag("loss"),
                         global_step=i_epoch,
@@ -155,6 +128,12 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
                             "train": avg_loss,
                             "val": val_loss,
                         },
+                    )
+                    t.set_postfix(
+                        {
+                            "Aculoss": (acu_loss / trained_samples),
+                            "val_loss": val_loss,
+                        }
                     )
 
                     # Save the model with the least loss on train data
@@ -201,4 +180,39 @@ def train(model: BaseModel = None, train_dataloader=None, val_dataloader=None):
                         )
                         min_validation_loss = acu_loss
                 t.close()
+
+                if test_dataloader is not None:
+                    conf = MyConfusuion(thr=thr).to(param.device)
+                    test_all_losses, ys, test_labels = test(
+                        model=model, dataloader=test_dataloader, confusion=conf
+                    )
+                    confusion_matrix = conf.compute()
+                    metrics = MetricsParameters()
+                    metrics.loadFromConfusion(confusion_matrix)
+                    metrics.loss = test_all_losses.sum(-1).mean()
+
+                    confusion_metrics = {
+                        key: metrics.toDict()[key] for key in filter_keis
+                    }
+                    _m = metrics.toDict()
+                    performance_metrics_dict = {
+                        key: _m[key] for key in _m.keys() if key not in filter_keis
+                    }
+
+                    # Save the metrics per epoch in tensorboard
+                    step_tag = getTag("test_confusion_step_")
+                    for key in confusion_metrics.keys():
+                        getWriter().add_scalars(
+                            main_tag=f"{step_tag}/{key}",
+                            global_step=i_epoch,
+                            tag_scalar_dict={key: confusion_metrics[key]},
+                        )
+                    step_tag = getTag("test_metrics_step_")
+                    for key in performance_metrics_dict.keys():
+                        getWriter().add_scalars(
+                            main_tag=f"{step_tag}/{key}",
+                            global_step=i_epoch,
+                            tag_scalar_dict={key: performance_metrics_dict[key]},
+                        )
+
     return best_train_threshold

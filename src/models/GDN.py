@@ -11,6 +11,8 @@ from util.time import *
 from .graph_layer import GraphLayer
 from util.preprocess import fully_conneted_adj
 from models.Lstm import LstmStart
+from datasets.TimeDataset import getDimensions
+from torch_geometric.nn.models import GAT
 
 
 def get_batch_edge_index(org_edge_index, batch_num, node_num):
@@ -82,28 +84,23 @@ class GNNLayer(nn.Module):
         return self.relu(out)
 
 
-class GDN(BaseModel):
-    def __init__(self, **kwargs):
-        super(GDN, self).__init__(**kwargs)
-        edge_index = fully_conneted_adj(self.node_num).to(
-            self.param.device, non_blocking=True
-        )
-
-        self.edge_index_sets = [edge_index]
+class GDNBASE(BaseModel):
+    def __init__(self, edge_index_sets=[], **kwargs):
+        super(GDNBASE, self).__init__(**kwargs)
+        self.edge_index_sets = edge_index_sets
 
         # edge_index = edge_index_sets[0]
 
+        edge_set_num = len(self.edge_index_sets)
         self.embedding = nn.Embedding(self.node_num, self.param.embedding_dimension)
         self.bn_outlayer_in = nn.BatchNorm1d(self.param.embedding_dimension)
 
-        edge_set_num = len(self.edge_index_sets)
         self.gnn_layers = nn.ModuleList(
             [
                 GNNLayer(
                     self.param.window_length,
                     self.param.embedding_dimension,
-                    inter_dim=self.param.embedding_dimension
-                    + self.param.embedding_dimension,
+                    inter_dim=self.param.embedding_dimension * 2,
                     heads=1,
                 )
                 for i in range(edge_set_num)
@@ -140,6 +137,11 @@ class GDN(BaseModel):
         batch_num, node_num, all_feature = x.shape
         x = x.view(-1, all_feature).contiguous()
 
+        # gcn_outs = torch.zeros(
+        #     (batch_num * node_num, self.param.embedding_dimension),
+        #     device=self.param.device,
+        #     requires_grad=False,
+        # )
         gcn_outs = []
         for i, edge_index in enumerate(edge_index_sets):
             edge_num = edge_index.shape[1]
@@ -183,6 +185,7 @@ class GDN(BaseModel):
                 .to(device)
                 .unsqueeze(0)
             )
+
             gated_j = topk_indices_ji.flatten().unsqueeze(0)
             gated_edge_index = torch.cat((gated_j, gated_i), dim=0)
 
@@ -195,20 +198,22 @@ class GDN(BaseModel):
                 node_num=node_num * batch_num,
                 embedding=all_embeddings,
             )
+            gcn_out = gcn_out.view(batch_num, node_num, -1)
+
+            indexes = torch.arange(0, node_num, device=device)
+            gcn_out = torch.mul(gcn_out, self.embedding(indexes))
+            gcn_out = gcn_out.permute(0, 2, 1)
+            gcn_out = F.relu(self.bn_outlayer_in(gcn_out))
+            gcn_out = gcn_out.permute(0, 2, 1)
+            gcn_out = gcn_out.reshape(batch_num * node_num, -1)
 
             gcn_outs.append(gcn_out)
-
+            # gcn_outs += gcn_out
+        # x = gcn_outs / len(edge_index_sets)
         x = torch.cat(gcn_outs, dim=1)
         x = x.view(batch_num, node_num, -1)
 
-        indexes = torch.arange(0, node_num, device=device)
-        out = torch.mul(x, self.embedding(indexes))
-
-        out = out.permute(0, 2, 1)
-        out = F.relu(self.bn_outlayer_in(out))
-        out = out.permute(0, 2, 1)
-
-        out = self.dp(out)
+        out = self.dp(x)
         out = self.out_layer(out)
         return out
 
@@ -218,9 +223,70 @@ class GDNLstmStart(BaseModel):
 
     def __init__(self, **kwargs):
         super(GDNLstmStart, self).__init__(**kwargs)
-        self.gdn = GDN(**kwargs)
+        self.gdn = GDNBASE(**kwargs)
         self.lstm = LstmStart(self.gdn.node_num)
 
     def forward(self, x):
         x = self.lstm(x)
         return self.gdn(x)
+
+
+class GDNFullyConnected(BaseModel):
+    """docstring for GDNFullyConnected."""
+
+    def __init__(self, **kwargs):
+
+        super(GDNFullyConnected, self).__init__(**kwargs)
+        edge_index_sets = [
+            fully_conneted_adj(self.node_num).to(self.param.device, non_blocking=True)
+        ]
+        self.gdn = GDNBASE(edge_index_sets=edge_index_sets, **kwargs)
+
+    def loss(self, x, y_truth):
+        return self.gdn.loss(x, y_truth)
+
+    def getParmeters():
+        return GDNBASE.getParmeters()
+
+
+class GDNModal(BaseModel):
+    """docstring for GDNModal."""
+
+    def __init__(self, **kwargs):
+        super(GDNModal, self).__init__(**kwargs)
+        edge_index_sets = [self.adj.detach().clone()]
+        self.gdn = GDNBASE(edge_index_sets=edge_index_sets, **kwargs)
+
+    def loss(self, x, y_truth):
+        return self.gdn.loss(x, y_truth)
+
+
+class GDNModalAntiModal(BaseModel):
+    """docstring for GDNMODAL."""
+
+    def __init__(self, **kwargs):
+        super(GDNModalAntiModal, self).__init__(**kwargs)
+        edge_index_sets = [
+            self.adj.detach().clone(),
+            (1 - self.adj).detach().clone(),
+        ]
+        self.gdn = GDNBASE(edge_index_sets=edge_index_sets, **kwargs)
+
+    def loss(self, x, y_truth):
+        return self.gdn.loss(x, y_truth)
+
+
+class GDNFull(BaseModel):
+    """docstring for GDNMODAL."""
+
+    def __init__(self, **kwargs):
+        super(GDNFull, self).__init__(**kwargs)
+        edge_index_sets = [
+            fully_conneted_adj(self.node_num).to(self.param.device, non_blocking=True),
+            self.adj.detach().clone(),
+            (1 - self.adj).detach().clone(),
+        ]
+        self.gdn = GDNBASE(edge_index_sets=edge_index_sets, **kwargs)
+
+    def loss(self, x, y_truth):
+        return self.gdn.loss(x, y_truth)

@@ -20,6 +20,13 @@ def getDimensions():
     return _x_dim, _y_dim
 
 
+def setDimensions(x_dim, y_dim):
+    global _x_dim
+    global _x_dim
+    _x_dim = x_dim
+    y_dim = _y_dim
+
+
 class TimeDataset(Dataset):
     def __init__(
         self,
@@ -34,19 +41,19 @@ class TimeDataset(Dataset):
         self.stride = get_param().stride
         self.total_rows = data_frame.shape[0]
         if mode == "train" and "attack" not in data_frame.columns:
-            self.label = torch.zeros(
+            data_frame["attack"] = torch.zeros(
                 self.total_rows,
                 dtype=torch.float32,
                 # device=self.device,
                 requires_grad=False,
             )
-        else:
-            self.label = torch.tensor(
-                data_frame["attack"].to_numpy(),
-                dtype=torch.float32,
-                # device=self.device,
-                requires_grad=False,
-            )
+
+        self.label = torch.tensor(
+            data_frame["attack"].to_numpy(),
+            dtype=torch.float32,
+            # device=self.device,
+            requires_grad=False,
+        )
         self.label = self.label.reshape(-1, 1).contiguous().pin_memory()
 
         xlist, ylist, next = sensorGroup_to_xy(column_groups, get_param().task)
@@ -79,16 +86,21 @@ class TimeDataset(Dataset):
         _y_dim = self.y.shape[1]
 
     def __len__(self):
-        return (self.total_rows - self.window_length - 1) // self.stride
+        return (
+            self.total_rows - self.window_length - (self.next_shifter + 1)
+        ) // self.stride
 
     def __getitem__(self, idx):
         start = idx * self.stride
         return (
-            self.x[start : start + self.window_length, :].t().to(device=self.device),
-            self.y[start + self.window_length + self.next_shifter].to(
-                device=self.device
-            ),
-            self.label[start + self.window_length + self.next_shifter, :].to(
-                device=self.device
-            ),
+            self.x[start : start + self.window_length, :]
+            .t()
+            .clone()
+            .to(device=self.device),
+            self.y[start + self.window_length + self.next_shifter]
+            .clone()
+            .to(device=self.device),
+            self.label[start + self.window_length + self.next_shifter, :]
+            .clone()
+            .to(device=self.device),
         )

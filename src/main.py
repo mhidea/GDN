@@ -14,15 +14,22 @@ from datasets.TimeDataset import TimeDataset
 from parameters.params import Params
 from test_loop import test
 from train_loop import train
-from util.env import getSnapShotPath, getWriter
+from util.env import getSnapShotPath, getWriter, getThreshold, getTrain_with_test
 from util.preprocess import findSensorActuator
-from evaluate import MyConfusuion, MetricsParameters
+from evaluate import (
+    BaseThreshold,
+    MyConfusuion,
+    MetricsParameters,
+    MinMaxThreshold,
+    IqrSensorThreshold,
+)
 from util.data import sensorGroup_to_xy
+import scipy.optimize as opt
 
 # Globals for data caching (consider refactoring later)
 _train_original: pd.DataFrame | None = None
 _test_original: pd.DataFrame | None = None
-_columns = None
+import importlib
 
 
 class Main:
@@ -98,16 +105,33 @@ class Main:
             # pin_memory=True,
             # num_workers=4,
         )
+
+        # Load tyhe classs. Handle the compilation in next step
         self.model: torch.nn.Module = self.param.model.getClass()(
             adj=adj, **modelParams
         ).to(self.param.device)
+
         if self.param.trained():
             print("Model is trained. Loading from file .....")
             self.load_model(self.param.best_validationModel_path())
-        # self.model = torch.compile(self.model, mode="reduce-overhead")
+        else:
+            print("Start compiling")
+            self.model = torch.compile(self.model, mode="max-autotune", fullgraph=True)
+            print("finished compiling")
 
     def load_model(self, path):
-        self.model.load_state_dict(torch.load(path, weights_only=True))
+        state_dict = torch.load(path, weights_only=True)
+        if next(iter(state_dict)).split(".")[0] == "_orig_mod":
+            self.model = torch.compile(self.model, mode="max-autotune", fullgraph=True)
+            self.model.load_state_dict(state_dict=state_dict)
+        else:
+            # self.model = torch.compile(self.model, mode="default", fullgraph=True)
+            print("NOt compiled model. recompiling ...")
+            self.model.load_state_dict(state_dict=state_dict)
+            self.model = torch.compile(self.model, mode="max-autotune", fullgraph=True)
+            print("Overwriting model")
+            torch.save(self.model.state_dict(), path)
+            print("Compilation finished")
 
     def create_adj(self, columns: list):
         stripped_columns = [re.sub(r"\d+", "", s) for s in columns]
@@ -121,7 +145,6 @@ class Main:
     def _load_param_DF(self, param: Params):
         global _train_original
         global _test_original
-        global _columns
         if _train_original is None:
             _train_original = pd.read_csv(
                 f"./data/{param.dataset.value}/train.csv", sep=",", index_col=0
@@ -129,6 +152,9 @@ class Main:
             _test_original = pd.read_csv(
                 f"./data/{param.dataset.value}/test.csv", sep=",", index_col=0
             )
+            _train_original.fillna(0, inplace=True)
+            _test_original.fillna(0, inplace=True)
+
             columns = {col: col.strip() for col in _train_original.columns}
             _train_original = _train_original.rename(columns=columns)
 
@@ -213,10 +239,12 @@ class Main:
             wasnt_trained = True
             print("###############################")
             print("Model Not Found. Training new model.")
+            tstld = self.test_dataloader if getTrain_with_test() else None
             best_threshold = train(
                 model=self.model,
                 train_dataloader=self.train_dataloader,
                 val_dataloader=self.val_dataloader,
+                test_dataloader=tstld,
             )
             print("###############################")
         else:
@@ -232,22 +260,28 @@ class Main:
 
         # Test the best model
         print("###############################")
+        best_model = self.model.to(self.param.device)
         print("Testing on test dataset")
+        all_train_losses, train_ys, train_labels = test(
+            best_model, self.train_dataloader
+        )
         # best_model_losses = test(best_model, self.train_dataloader)
         # best_model_stats = createStats(best_model_losses)
-        best_model = self.model.to(self.param.device)
         conf = MyConfusuion(thr=best_threshold).to(device=self.param.device)
-        all_losses, _, _ = test(best_model, self.test_dataloader, confusion=conf)
+        all_test_losses, test_ys, test_labels = test(
+            best_model, self.test_dataloader, confusion=conf
+        )
         confusion_matrix = conf.compute()
         metrics = MetricsParameters()
         metrics.loadFromConfusion(confusion_matrix)
-        metrics.loss = all_losses.sum(-1).mean()
+        metrics.loss = all_test_losses.sum(-1).mean()
         print("scores")
         print(
             f"Total test dataset samples: {self.num_test_samples} . Total anomalies (label=1) : {self.num_anomalies} "
         )
 
         print(metrics.summary())
+
         # Log results if the model was trained in this run
         if wasnt_trained:
             getWriter().add_hparams(
@@ -256,19 +290,77 @@ class Main:
                 metric_dict=metrics.toDict(),
                 # global_step=i,
             )
+
+            print("Evaluating besd model results:")
+            thrs = [MinMaxThreshold, getThreshold().__class__]
+            thr_string = ""
+            for thr_type in thrs:
+                best_multipier = Main.minimizer(
+                    class_type=thr_type,
+                    train_all_losses=all_train_losses,
+                    test_all_losses=all_test_losses,
+                    all_labels=test_labels,
+                )
+                thr: BaseThreshold = Main.createClass("evaluate", thr_type)
+
+                thr.multiplier = best_multipier
+
+                print(thr.summary())
+                thr_string += thr.summary() + "\n\n"
+                thr.fit(all_train_losses)
+
+                preds = thr.transform(all_test_losses)
+                for i in range(len(preds)):
+                    getWriter().add_scalars(
+                        main_tag=(f"predictaion_{thr.__class__.__name__}_{step}"),
+                        global_step=i + 1,
+                        tag_scalar_dict={
+                            "pred": preds[i].cpu().numpy(),
+                            "label": test_labels[i].cpu().numpy(),
+                        },
+                    )
+
+            thr_string += "(best) " + best_threshold.summary()
+            # clearPAths()
             getWriter().add_text(
                 "summary",
-                best_threshold.summary()
-                + "\n\n"
+                thr_string
                 + metrics.summary()
                 + "\n\n"
                 + self.param.summary(extra_dict=self.modelParams),
                 global_step=step,
             )
-            # clearPAths()
             getWriter().flush()
 
         return metrics
+
+    def minimizer(class_type, train_all_losses, test_all_losses, all_labels):
+        return opt.minimize_scalar(
+            Main.FP,
+            args=(class_type, train_all_losses, test_all_losses, all_labels),
+            bounds=(0, 3),
+            method="bounded",
+        ).x
+
+    def createClass(module_path: str, class_type: type):
+        class_name = class_type.__name__
+
+        # Dynamically import the module (including submodule)
+        module = importlib.import_module(module_path)
+        return getattr(module, class_name)()
+
+    def FP(x, class_type, train_all_losses, test_all_losses, all_labels):
+
+        # Get the class from the module
+
+        thr = Main.createClass("evaluate", class_type)
+        thr.multiplier = x
+        thr.fit(train_all_losses)
+        mxConf = MyConfusuion(thr=thr).cuda()
+        mxConf.update(test_all_losses, all_labels)
+        mtr = MetricsParameters()
+        mtr.loadFromConfusion(mxConf.compute())
+        return mtr.FP
 
     def train_validation_loaders(self, train_dataset):
         dataset_len = int(len(train_dataset))

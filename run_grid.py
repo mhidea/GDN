@@ -3,7 +3,7 @@ from main import Main
 from util.consts import *
 from util.env import *
 import itertools
-from evaluate import IqrThreshold
+from evaluate import IqrThreshold, IqrSensorThreshold
 
 import torch
 import pickle
@@ -14,13 +14,14 @@ if __name__ == "__main__":
     param = Params()
     param.device = "cuda" if torch.cuda.is_available() else "cpu"
     set_param(param)
-    param.save_path = "./snapshot/my_mstgat_swat_noconst/25_06_05_11_44_56/0"
 
     # main define task
-    param.task = Tasks.s_next_s
-    param.dataset = Datasets.batadal
-    param.model = Models.my_mstgat
-    setThreshold(IqrThreshold())
+    param.task = Tasks.sa_next_sa
+    param.dataset = Datasets.wadi
+    param.model = Models.my_gat_encoder_modal
+    use_defined_adj = False
+    setTrain_with_test(False)
+    setThreshold(IqrSensorThreshold())
     createPaths(param.model, param.dataset)
 
     model_parameters = param.model.getClass().getParmeters()
@@ -41,20 +42,26 @@ if __name__ == "__main__":
         model_parameters = {"sparsification_method": ["topk", "dropout"]}
     elif param.model == Models.diffpool:
         model_parameters = {"max_nodes": [150]}
-    elif param.model in [Models.my_mstgat, Models.my_mstgat2]:
-        model_parameters = {"gamma1": [0.5], "gamma2": [0.8], "kernel_size": [16]}
+    elif param.model in [Models.my_mstgat, Models.my_mstgat2, Models.my_mstgat_lstm]:
+        model_parameters = {
+            "gamma1": [0.5],
+            "gamma2": [0.8],
+            "kernel_size": [16],
+        }
 
     # Creating grid search
     # This python dictionary is flexible.you can change the keys as you wish.
     grid = {
-        "epoch": [90],
+        "epoch": [50],
         "batch": [32],
-        "window_length": [5],
-        "embedding_dimension": [32],
-        "topk": [25],
-        "out_layer_inter_dim": [32],
-        "out_layer_num": [2],
+        "window_length": [16],
+        "embedding_dimension": [96],
+        "topk": [10],
+        "out_layer_inter_dim": [96],
+        "out_layer_num": [1],
         # use stride for dabase summerizatoion . default = 1 (no summerization)
+        "lstm_hidden_dim": [64],
+        "lstm_layers_num": [1],
         "stride": [1],
     }
 
@@ -69,6 +76,7 @@ if __name__ == "__main__":
         _g.append(temp)
     # create a text for list of parameters in the grid
     grid_strig = f"# Grid Params\n\n**Total runs: {total}**"
+    grid_strig += f"\n\nuse_defined_adj = {use_defined_adj}\n\n Threshold: {getThreshold().__class__.__name__}"
     grid_strig += "\n\n".join(
         [
             f"\n\n- **{key}**: " + " , ".join([str(value) for value in grid[key]])
@@ -82,34 +90,62 @@ if __name__ == "__main__":
 
     param_keies = param.toDict().keys()
 
-    adj = None
-    if param.dataset == Datasets.batadal:
-        count = 43
-        modals = [[6, 13, 14, 33, 34], [0, 7, 8, 28, 36], [3, 11, 31]]
-        adj = torch.zeros((count, count)).float()
-        excluded_numbers = set(num for sublist in modals for num in sublist)
-        # Generate the desired array
-        all_rest = [num for num in range(count) if num not in excluded_numbers]
-        modals.append(all_rest)
-        for modal in modals:
-            for s1 in modal:
-                for s2 in modal:
-                    adj[s1][s2] = 1
-        if param.task == Tasks.all_next_all:
-            pass
-        elif param.task == Tasks.sa_next_sa:
-            count = 36
-            # modals = [
-            #     [6, 13, 14, 33, 34],
-            #     [0, 7, 8, 28],
-            #     [3, 11, 31],
-            # ]
-            adj = adj[:36, :36]
-        elif param.task == Tasks.s_next_s:
-            adj = adj[:28, :28]
-
-    # if adj is not None:
-
+    adj: torch.Tensor = None
+    if use_defined_adj:
+        if param.dataset == Datasets.batadal:
+            count = 44
+            modals = [[6, 13, 14, 33, 34], [0, 7, 8, 28, 36], [3, 11, 31], [43]]
+            adj = torch.zeros((count, count)).float()
+            excluded_numbers = set(num for sublist in modals for num in sublist)
+            # Generate the desired array
+            all_rest = [num for num in range(count) if num not in excluded_numbers]
+            modals.append(all_rest)
+            for modal in modals:
+                for s1 in modal:
+                    for s2 in modal:
+                        adj[s1][s2] = 1
+            if param.task == Tasks.sacl_next_sacl:
+                pass
+            elif param.task == Tasks.sa_next_sa:
+                count = 36
+                # modals = [
+                #     [6, 13, 14, 33, 34],
+                #     [0, 7, 8, 28],
+                #     [3, 11, 31],
+                # ]
+                adj = adj[:36, :36]
+            elif param.task == Tasks.s_next_s:
+                adj = adj[:28, :28]
+            elif param.task == Tasks.sl_next_sl:
+                adj = adj[:, list(range(28)) + [-1]]
+                adj = adj[list(range(28)) + [-1], :]
+        elif param.dataset == Datasets.wadi:
+            count = 126
+            modals = [[6, 5, 4], [0, 7, 8, 28, 36], [3, 11, 31], [43]]
+            adj = torch.zeros((count, count)).float()
+            excluded_numbers = set(num for sublist in modals for num in sublist)
+            # Generate the desired array
+            all_rest = [num for num in range(count) if num not in excluded_numbers]
+            modals.append(all_rest)
+            for modal in modals:
+                for s1 in modal:
+                    for s2 in modal:
+                        adj[s1][s2] = 1
+            if param.task == Tasks.sacl_next_sacl:
+                pass
+            elif param.task == Tasks.sa_next_sa:
+                count = 36
+                # modals = [
+                #     [6, 13, 14, 33, 34],
+                #     [0, 7, 8, 28],
+                #     [3, 11, 31],
+                # ]
+                adj = adj[:36, :36]
+            elif param.task == Tasks.s_next_s:
+                adj = adj[:28, :28]
+            elif param.task == Tasks.sl_next_sl:
+                adj = adj[:, list(range(28)) + [-1]]
+                adj = adj[list(range(28)) + [-1], :]
     for i, (x) in enumerate(itertools.product(*_g)):
         setTag(i)
         param.save_path = getSnapShotPath()

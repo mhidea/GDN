@@ -12,6 +12,7 @@ class Datasets(Enum):
     msl = "msl"
     wadi = "wadi"
     dummy = "dummy"
+    psm = "psm"
 
 
 class Tasks(Enum):
@@ -37,11 +38,16 @@ class Tasks(Enum):
     sc_next_s = 6
     sa_next_s = 7
     sa_next_sa = 8
-    all_next_all = 9
+    sacl_next_sacl = 9
+    sl_next_sl = 10
+    sal_next_sal = 11
 
 
 class Models(Enum):
-    gdn = "models.GDN.GDN"
+    gdn_modal = "models.GDN.GDNModal"
+    gdn_modal_antimodal = "models.GDN.GDNModalAntiModal"
+    gdn_fullyconnected = "models.GDN.GDNFullyConnected"
+    gdn_full = "models.GDN.GDNFull"
     gdn_lstm_start = "models.GDN.GDNLstmStart"
     gnn_tam_relu = "models.gnn_tam.GNN_TAM_RELU"
     gnn_tam = "models.gnn_tam.GNN_TAM"
@@ -51,8 +57,12 @@ class Models(Enum):
     my_gat_embd = "models.mine.MyModels.MyGATEmbd"
     my_gnn_lstm = "models.mine.MyModels.GNN_LSTM_AnomalyDetector_Optimized"
     my_gcn = "models.mine.MyGCN.MyGCN"
+    my_gat_encoder = "models.mine.MyGCN.GATEncoder"
+    my_gat_encoder_modal = "models.mine.MyGCN.GATEncoderModal"
     my_mstgat = "models.mine.MSTGAT.MSTGAT"
     my_mstgat2 = "models.mine.MSTGAT2.MSTGAT2"
+    my_mstgat2_lstm = "models.mine.MSTGAT2.MSTGAT2_LSTM"
+    my_mstgat_lstm = "models.mine.MSTGAT.MSTGATLstm"
     diffpool = "models.DiffPool.DiffPool"
     diffpool_lstm_start = "models.DiffPool.DiffPoolLstmStart"
 

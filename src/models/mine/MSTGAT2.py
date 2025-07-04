@@ -10,6 +10,37 @@ from typing import Optional, Tuple
 EPS = 1e-15
 
 
+class VAE(torch.nn.Module):
+    def __init__(self, input_dim=64, latent_dim=16):
+        super().__init__()
+        # Encoder
+        self.fc1 = torch.nn.Linear(input_dim, 128)
+        self.fc_mu = torch.nn.Linear(128, latent_dim)
+        self.fc_logvar = torch.nn.Linear(128, latent_dim)
+        # Decoder
+        self.fc2 = torch.nn.Linear(latent_dim, 128)
+        self.fc3 = torch.nn.Linear(128, input_dim)
+
+    def encode(self, x):
+        h = torch.nn.functional.relu(self.fc1(x))
+        return self.fc_mu(h), self.fc_logvar(h)
+
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def decode(self, z):
+        h = torch.nn.functional.relu(self.fc2(z))
+        return torch.sigmoid(self.fc3(h))  # for normalized inputs (0–1)
+
+    def forward(self, x):
+        mu, logvar = self.encode(x)
+        z = self.reparameterize(mu, logvar)
+        recon = self.decode(z)
+        return recon, mu, logvar
+
+
 class MyVGAE(VGAE):
     """docstring for MyVGAE."""
 
@@ -85,7 +116,7 @@ class MSTGAT2(BaseModel):
         self.multi_head_attention = GAT(
             in_channels=1,
             hidden_channels=self.param.lstm_hidden_dim,
-            out_channels=self.param.embedding_dimension,
+            out_channels=self.param.out_layer_inter_dim,
             num_layers=self.param.out_layer_num,
             act="relu",
         )
@@ -93,7 +124,7 @@ class MSTGAT2(BaseModel):
         self.inter_modal = GAT(
             in_channels=1,
             hidden_channels=self.param.lstm_hidden_dim,
-            out_channels=self.param.embedding_dimension,
+            out_channels=self.param.out_layer_inter_dim,
             num_layers=self.param.out_layer_num,
             act="relu",
         )
@@ -101,7 +132,7 @@ class MSTGAT2(BaseModel):
         self.intra_modal = GAT(
             in_channels=1,
             hidden_channels=self.param.lstm_hidden_dim,
-            out_channels=self.param.embedding_dimension,
+            out_channels=self.param.out_layer_inter_dim,
             num_layers=self.param.out_layer_num,
             act="relu",
         )
@@ -194,6 +225,180 @@ class MSTGAT2(BaseModel):
         # Predictor
         # Apply the transformation to each channel separately
         prediction = self.lin_predictor(x)
+        loss_prediction = torch.nn.functional.mse_loss(
+            prediction.squeeze(-1), x_truth, reduction="none"
+        )
+        # VAE
+        data_list_vae = [Data(x=x_, edge_index=index, edge_weight=weight) for x_ in x]
+
+        batch_vae = Batch.from_data_list(data_list_vae)
+        vae_out = self.vae.encode(
+            batch_vae.x, batch_vae.edge_index, batch_vae.edge_weight
+        )
+
+        loss_reconstruction = self.vae.recon_loss(vae_out, index)
+        return self.gamma1 * loss_reconstruction + (1 - self.gamma2) * loss_prediction
+
+        #         for i, x_ in enumerate(x):
+        # # batch_vae = Batch.from_data_list(data_list_vae)
+        # vae_out = self.vae.encode(x_, index, weight)
+
+        # loss_reconstruction = self.vae.recon_loss(vae_out, index)
+        # loss_prediction[i] = (
+        #     self.gamma1 * loss_reconstruction
+        #     + (1 - self.gamma2) * loss_prediction[i]
+        # )
+
+        return loss_prediction
+
+
+class MSTGAT2_LSTM(BaseModel):
+    """docstring for MSTGAT2_LSTM."""
+
+    def __init__(self, **kwargs):
+        super(MSTGAT2_LSTM, self).__init__(**kwargs)
+        self.gamma1 = kwargs["gamma1"]
+        self.gamma2 = kwargs["gamma2"]
+        kernel_size = kwargs["kernel_size"]
+
+        self.adj = self.adj.to(device=self.param.device)
+
+        self.inter_index, self.inter_weigth = dense_to_sparse(self.adj.detach().clone())
+        self.inter_index.requires_grad = False
+        self.inter_weigth.requires_grad = False
+
+        self.intra_index, self.intra_weigth = dense_to_sparse(
+            (1 - self.adj).detach().clone()
+        )
+
+        self.intra_index.requires_grad = False
+        self.intra_weigth.requires_grad = False
+
+        self.graph_learner = GraphLearner(
+            num_nodes=self.node_num,
+            num_embeddings=self.param.embedding_dimension,
+            top_k=self.param.topk,
+        )
+
+        self.lin1 = MLP(
+            in_channels=self.param.window_length,
+            out_channels=self.param.embedding_dimension,
+            num_layers=1,
+            bias=False,
+            act=None,
+        )
+
+        self.multi_head_attention = GAT(
+            in_channels=1,
+            hidden_channels=2 * self.param.out_layer_inter_dim,
+            out_channels=self.param.out_layer_inter_dim,
+            num_layers=self.param.out_layer_num,
+        )
+
+        self.inter_modal = GAT(
+            in_channels=1,
+            hidden_channels=2 * self.param.out_layer_inter_dim,
+            out_channels=self.param.out_layer_inter_dim,
+            num_layers=self.param.out_layer_num,
+        )
+
+        self.intra_modal = GAT(
+            in_channels=1,
+            hidden_channels=2 * self.param.out_layer_inter_dim,
+            out_channels=self.param.out_layer_inter_dim,
+            num_layers=self.param.out_layer_num,
+        )
+        self.lin_spatial_to_temporal = MLP(
+            in_channels=3 * self.param.out_layer_inter_dim,
+            out_channels=1,
+            num_layers=1,
+        )
+
+        self.lstm = torch.nn.LSTM(
+            batch_first=True,
+            input_size=self.node_num,
+            hidden_size=self.param.lstm_hidden_dim,
+            num_layers=self.param.lstm_layers_num,
+            # proj_size=self.node_num,
+        )
+        self.projection = MLP(
+            in_channels=self.param.lstm_hidden_dim,
+            out_channels=self.node_num,
+            num_layers=1,
+        )
+
+        self.lin_predictor = MLP(
+            in_channels=self.param.window_length, out_channels=1, num_layers=1
+        )
+        self.vae = MyVGAE(
+            (
+                VariationalGCNEncoder(
+                    self.param.window_length,
+                    out_channels=self.param.out_layer_inter_dim,
+                )
+            )
+        )
+
+    def getParmeters():
+        return {"kernel_size": 16, "gamma1": 0.5, "gamma2": 0.5}
+
+    def loss(self, x, x_truth):
+        # x=(Node,Window)
+        batch = x.shape[0]
+        # get learnable adjacency matrix
+        trainable_adj = self.graph_learner()
+        index, weight = dense_to_sparse(trainable_adj)
+
+        x = x.permute(0, 2, 1).reshape(-1, self.node_num).unsqueeze(-1).contiguous()
+
+        data_list_attention = [
+            Data(x=x_, edge_index=index, edge_weight=weight) for x_ in x
+        ]
+        batch_attention = Batch.from_data_list(data_list_attention)
+        x1 = self.multi_head_attention(
+            batch_attention.x,
+            edge_index=batch_attention.edge_index,
+            edge_weight=batch_attention.edge_weight,
+        ).view(-1, self.node_num, self.param.out_layer_inter_dim)
+
+        data_list_inter = [
+            Data(x=x_, edge_index=self.inter_index, edge_weight=self.inter_weigth)
+            for x_ in x
+        ]
+        batch_inter = Batch.from_data_list(data_list_inter)
+        # x2 = self.inter_modal(h0, self.iter_adjacency)
+        x2 = self.inter_modal(
+            batch_inter.x,
+            edge_index=batch_inter.edge_index,
+            edge_weight=batch_inter.edge_weight,
+        ).view(-1, self.node_num, self.param.out_layer_inter_dim)
+
+        data_list_intra = [
+            Data(x=x_, edge_index=self.intra_index, edge_weight=self.intra_weigth)
+            for x_ in x
+        ]
+        batch_intra = Batch.from_data_list(data_list_intra)
+        # x3 = self.intra_modal(h0, self.itra_adjacency)
+        x3 = self.intra_modal(
+            batch_intra.x,
+            edge_index=batch_intra.edge_index,
+            edge_weight=batch_intra.edge_weight,
+        ).view(-1, self.node_num, self.param.out_layer_inter_dim)
+
+        x = torch.concat((x1, x2, x3), dim=-1).relu()
+        # x = torch.nn.functional.normalize(x, p=2, dim=-1)
+
+        x = self.lin_spatial_to_temporal(x)  # (Node ,window_length)
+        x = x.view(batch, -1, self.node_num)
+        # (batch,window,nodes)
+        x, (h, c) = self.lstm(x)
+        x = x.relu()
+        x = self.projection(x)
+        x = x.permute(0, 2, 1)
+        prediction = self.lin_predictor(x)
+
+        # Predictor
+        # Apply the transformation to each channel separately
         loss_prediction = torch.nn.functional.mse_loss(
             prediction.squeeze(-1), x_truth, reduction="none"
         )
